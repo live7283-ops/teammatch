@@ -1,0 +1,2205 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TeamMatch AI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ---------------------------------------------------------------
+   0. 토큰
+--------------------------------------------------------------- */
+:root{
+  --bg:#FFFFFF;
+  --bg-deep:#F4F5F2;
+  --surface:#FFFFFF;
+  --surface-2:#FAFAF8;
+  --line:#E7E8E3;
+  --line-strong:#D6D8D0;
+
+  --navy:#20241E;
+  --navy-soft:#525A4C;
+  --indigo:#3F8F35;
+  --indigo-600:#337528;
+  --indigo-050:#EFF8EA;
+  --indigo-100:#DCEFCF;
+
+  --lime:#9AE24B;
+  --lime-soft:#F2FBE7;
+  --sky:#EEF3F6;
+  --peach:#FBF3E8;
+
+  --mint:#2E9C7E;
+  --mint-050:#E7F6F0;
+  --amber:#AF7A21;
+  --amber-050:#FBF1DD;
+  --rose:#C4485F;
+  --rose-050:#FBEAEE;
+
+  --text:#20241E;
+  --text-2:#5B6358;
+  --text-3:#8B948A;
+  --white:#fff;
+
+  --r-sm:8px; --r-md:12px; --r-lg:18px; --r-xl:26px; --r-pill:999px;
+  --sh-1:0 1px 2px rgba(20,24,18,.04), 0 6px 18px rgba(20,24,18,.05);
+  --sh-2:0 12px 34px rgba(20,24,18,.09);
+  --sh-lift:0 18px 44px rgba(20,24,18,.13);
+  --sans:"IBM Plex Sans KR", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --sidebar-w:248px;
+}
+:root[data-theme="dark"]{
+  --bg:#15170F; --bg-deep:#101209; --surface:#1D2016; --surface-2:#22261A;
+  --line:#30341F; --line-strong:#414526;
+  --navy:#EDF1E6; --navy-soft:#C4CBB6;
+  --indigo:#7FCB6C; --indigo-600:#6BB958; --indigo-050:#212B18; --indigo-100:#2B3620;
+  --lime:#AEE07A; --lime-soft:#26301A; --sky:#20241F; --peach:#312A1C;
+  --mint:#5BC6A8; --mint-050:#18322B; --amber:#D6A253; --amber-050:#33280F;
+  --rose:#E8899B; --rose-050:#38181F;
+  --text:#EDF1E6; --text-2:#B4BCA6; --text-3:#84907A; --white:#1D2016;
+}
+
+/* ---------------------------------------------------------------
+   1. 기본
+--------------------------------------------------------------- */
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0; background:var(--bg); color:var(--text);
+  font-family:var(--sans); font-size:15px; line-height:1.6;
+  -webkit-font-smoothing:antialiased;
+}
+img{max-width:100%}
+button,input,select,textarea{font:inherit; color:inherit}
+button{cursor:pointer; border:none; background:none}
+a{color:var(--navy); text-decoration:none}
+h1,h2,h3,h4{margin:0; line-height:1.3; letter-spacing:-.02em; color:var(--navy); font-weight:600}
+p{margin:0}
+:focus-visible{outline:3px solid var(--indigo); outline-offset:2px; border-radius:6px}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001ms !important; transition-duration:.001ms !important}
+}
+.hidden{display:none !important}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* 공통 컴포넌트 */
+.btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:11px 18px; border-radius:var(--r-pill); font-weight:600; font-size:14.5px;
+  background:var(--indigo); color:#fff; transition:background .15s, transform .12s, box-shadow .15s;
+  white-space:nowrap;
+}
+.btn:hover{background:var(--indigo-600)}
+.btn:active{transform:translateY(1px)}
+.btn[disabled]{opacity:.45; cursor:not-allowed}
+.btn-lg{padding:14px 24px; font-size:16px; width:100%}
+.btn-ghost{background:var(--surface); color:var(--navy); border:1px solid var(--line-strong)}
+.btn-ghost:hover{background:var(--bg-deep); border-color:var(--line-strong)}
+.btn-quiet{background:transparent; color:var(--text-2); padding:9px 14px}
+.btn-quiet:hover{background:var(--bg-deep); color:var(--navy)}
+.btn-sm{padding:8px 14px; font-size:13.5px}
+
+.card{background:var(--surface); border:1px solid var(--line); border-radius:var(--r-xl); box-shadow:var(--sh-1)}
+.card-pad{padding:26px}
+.card-head{display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:18px; flex-wrap:wrap}
+.card-title{font-size:17px}
+.card-sub{color:var(--text-2); font-size:13.5px; margin-top:3px}
+
+.field{margin-bottom:16px}
+.field label{display:block; font-size:13.5px; font-weight:500; color:var(--navy-soft); margin-bottom:7px}
+.input, .select, .textarea{
+  width:100%; padding:12px 14px; border:1.5px solid var(--line-strong); background:var(--surface-2);
+  border-radius:var(--r-md); transition:border-color .15s, background .15s, box-shadow .15s;
+}
+.input:focus,.select:focus,.textarea:focus{
+  outline:none; border-color:var(--indigo); background:var(--surface);
+  box-shadow:0 0 0 4px var(--indigo-050);
+}
+.textarea{resize:vertical; min-height:96px; line-height:1.65}
+.select{appearance:none; background-image:linear-gradient(45deg,transparent 50%,var(--text-3) 50%),linear-gradient(135deg,var(--text-3) 50%,transparent 50%);
+  background-position:calc(100% - 19px) 51%, calc(100% - 13px) 51%; background-size:6px 6px, 6px 6px; background-repeat:no-repeat; padding-right:38px}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:14px}
+.help{font-size:12.5px; color:var(--text-3); margin-top:6px}
+.err{font-size:13px; color:var(--rose); margin-top:10px; display:none}
+.err.show{display:block}
+
+.chip{
+  display:inline-flex; align-items:center; gap:6px; padding:7px 13px; border-radius:var(--r-pill);
+  border:1.5px solid var(--line-strong); background:var(--surface-2); color:var(--text-2);
+  font-size:13.5px; font-weight:500; transition:.15s; cursor:pointer; user-select:none;
+}
+.chip:hover{border-color:var(--line-strong); color:var(--navy)}
+.chip[aria-pressed="true"]{background:var(--indigo); border-color:var(--indigo); color:#fff}
+.chip-static{cursor:default}
+.chip-static:hover{border-color:var(--line-strong); color:var(--text-2)}
+.chips{display:flex; flex-wrap:wrap; gap:8px}
+
+.tag{display:inline-block; padding:4px 10px; border-radius:var(--r-sm); font-size:12.5px; font-weight:500;
+  background:var(--bg-deep); color:var(--text-2)}
+.tag-mint{background:var(--mint-050); color:var(--mint)}
+.tag-amber{background:var(--amber-050); color:var(--amber)}
+.tag-grey{background:var(--bg-deep); color:var(--text-2)}
+.tag-indigo{background:var(--indigo-050); color:var(--indigo-600); font-weight:600}
+
+.avatar{width:38px;height:38px;border-radius:var(--r-pill); display:grid; place-items:center;
+  font-weight:600; font-size:14px; color:#fff; background:var(--navy-soft); flex:none}
+
+/* 역할 선택 세그먼트 */
+.seg{display:flex; gap:4px; padding:4px; background:var(--bg-deep); border-radius:var(--r-pill); margin-bottom:20px}
+.seg button{flex:1; padding:10px 8px; border-radius:var(--r-pill); font-size:14px; font-weight:600;
+  color:var(--text-2); transition:.15s}
+.seg button[aria-pressed="true"]{background:var(--surface); color:var(--indigo); box-shadow:var(--sh-1)}
+.seg small{display:block; font-weight:400; font-size:11.5px; color:var(--text-3); margin-top:1px}
+.seg button[aria-pressed="true"] small{color:var(--indigo)}
+
+/* 표 */
+.tbl{width:100%; border-collapse:collapse; font-size:14px}
+.tbl th{text-align:left; font-size:12.5px; font-weight:500; color:var(--text-3); padding:0 12px 10px; white-space:nowrap}
+.tbl td{padding:12px; border-top:1px solid var(--line); vertical-align:middle}
+.tbl tr:hover td{background:var(--surface-2)}
+.tbl .num{color:var(--text-3); font-size:13px}
+.tbl-wrap{overflow-x:auto; margin:0 -6px}
+.right{text-align:right}
+
+/* 진행 바 라벨 */
+.metric{display:flex; justify-content:space-between; font-size:13px; color:var(--text-2); margin-bottom:7px}
+.metric b{color:var(--navy); font-weight:600}
+
+/* 코드 표시 */
+.code-box{display:flex; align-items:center; gap:10px; padding:12px 16px; border-radius:var(--r-md);
+  background:var(--surface-2); border:1.5px dashed var(--line-strong)}
+.code-box .cd{font-size:20px; font-weight:600; letter-spacing:.32em; color:var(--indigo-600)}
+
+/* 해석 결과 테이블 */
+.parse-row{display:flex; align-items:center; gap:10px; padding:11px 0; font-size:13.5px; color:var(--text-2)}
+.parse-row + .parse-row{border-top:1px dashed var(--line)}
+.parse-row input{accent-color:var(--indigo); width:16px;height:16px; flex:none}
+.parse-row .p-txt{flex:1}
+
+.class-card{display:block; width:100%; text-align:left; padding:22px; border-radius:var(--r-xl);
+  background:var(--surface); border:1px solid var(--line); box-shadow:var(--sh-1); transition:.18s; cursor:pointer}
+.class-card:hover{box-shadow:var(--sh-2); border-color:var(--line-strong)}
+.class-card.active{border-color:var(--indigo); box-shadow:0 0 0 3px var(--indigo-050)}
+
+/* 편성 프리셋 */
+.preset-row{display:flex; gap:14px; padding:2px 2px 6px; overflow-x:auto}
+.preset{flex:0 0 268px; border:1.5px solid var(--line); border-radius:var(--r-lg); padding:16px;
+  background:var(--surface-2); transition:.16s; cursor:pointer}
+.preset:hover{border-color:var(--line-strong)}
+.preset.on{border-color:var(--indigo); background:var(--indigo-050); box-shadow:0 0 0 3px var(--indigo-050)}
+.preset .p-head{display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px}
+.preset .p-head b{font-size:14.5px; color:var(--navy)}
+.preset .p-desc{font-size:12.5px; color:var(--text-3); min-height:34px; line-height:1.5}
+.preset .p-w{display:grid; gap:5px; margin:12px 0}
+.preset .p-wi{display:flex; align-items:center; gap:8px; font-size:11.5px; color:var(--text-2)}
+.preset .p-wi i{font-style:normal; width:28px; color:var(--text-3); flex:none}
+.preset .p-dots{display:flex; gap:3px; flex:1}
+.preset .p-dots span{width:9px;height:9px;border-radius:50%; background:var(--bg-deep); border:1px solid var(--line-strong)}
+.preset .p-dots span.on{background:var(--indigo); border-color:var(--indigo)}
+.preset .p-wi b{width:12px; text-align:right; font-weight:600; color:var(--navy-soft); flex:none}
+.preset .p-foot{display:flex; align-items:center; gap:6px; margin-top:4px}
+.save-preset{display:flex; gap:8px; margin-top:16px; padding-top:16px; border-top:1px dashed var(--line)}
+.save-preset .input{flex:1}
+@media(max-width:560px){.preset{flex:0 0 240px} .save-preset{flex-direction:column}}
+
+.toast{
+  position:fixed; left:50%; bottom:26px; transform:translate(-50%, 14px);
+  background:var(--navy); color:var(--bg); padding:13px 22px; border-radius:var(--r-pill);
+  box-shadow:var(--sh-2); font-size:14px; font-weight:500; opacity:0; pointer-events:none;
+  transition:opacity .2s, transform .2s; z-index:200; max-width:90vw; text-align:center;
+}
+.toast.show{opacity:1; transform:translate(-50%,0)}
+
+/* ---------------------------------------------------------------
+   2. 로그인 / 회원가입
+--------------------------------------------------------------- */
+#authView{min-height:100vh; display:grid; grid-template-columns:1.05fr .95fr}
+.auth-brandside{
+  background:var(--surface);
+  color:var(--text-2); padding:56px 6vw; display:flex; flex-direction:column; justify-content:space-between;
+  position:relative; overflow:hidden; border-right:1px solid var(--line);
+}
+.brand{display:flex; align-items:center; gap:11px; font-weight:600; letter-spacing:-.02em; font-size:18px; color:var(--navy)}
+.brand-mark{width:34px;height:34px;border-radius:11px;background:var(--indigo);display:grid;place-items:center;flex:none}
+.brand-mark svg{width:20px;height:20px}
+.auth-copy{max-width:520px; position:relative; z-index:2}
+.auth-copy h1{color:var(--navy); font-size:clamp(30px, 3.6vw, 44px); font-weight:600; line-height:1.24}
+.auth-copy h1 em{font-style:normal; display:block; color:var(--indigo); font-weight:400}
+.auth-copy .lead{margin-top:20px; color:var(--text-2); font-size:16px; max-width:44ch}
+.auth-points{list-style:none; margin:34px 0 0; padding:0; display:grid; gap:14px}
+.auth-points li{display:flex; gap:13px; align-items:flex-start; font-size:14.5px; color:var(--text-2)}
+.auth-points b{display:block; color:var(--navy); font-weight:600; font-size:15px; margin-bottom:1px}
+.pt-dot{width:26px;height:26px;border-radius:9px;background:var(--surface-2);border:1px solid var(--line-strong);
+  display:grid;place-items:center; font-size:13px; color:var(--indigo-600); font-weight:600; flex:none; margin-top:2px}
+.auth-foot{font-size:12.5px; color:var(--text-3); position:relative; z-index:2}
+
+.auth-formside{display:grid; place-items:center; padding:48px 24px; background:var(--bg)}
+.auth-card{width:100%; max-width:420px}
+.auth-card .card{padding:34px}
+.auth-card h2{font-size:24px}
+.auth-card .card-sub{margin-top:8px; font-size:14px}
+.auth-switch{margin-top:20px; text-align:center; font-size:14px; color:var(--text-2)}
+.auth-switch button{font-weight:600; color:var(--indigo)}
+.auth-switch button:hover{text-decoration:underline}
+.demo-note{
+  margin-top:18px; padding:13px 15px; border-radius:var(--r-md); background:var(--surface-2);
+  border-left:3px solid var(--indigo); color:var(--text-2); font-size:13px; line-height:1.55;
+}
+.demo-note b{color:var(--navy)}
+@media (max-width: 900px){
+  #authView{grid-template-columns:1fr}
+  .auth-brandside{padding:36px 24px 30px}
+  .auth-points{display:none}
+  .auth-foot{display:none}
+  .auth-formside{padding:28px 20px 48px}
+}
+
+/* ---------------------------------------------------------------
+   3. 앱 셸
+--------------------------------------------------------------- */
+#appView{display:flex; align-items:stretch; min-height:100vh; width:100%}
+.sidebar{
+  flex:0 0 248px; width:248px; max-width:248px; box-sizing:border-box;
+  background:var(--surface); color:var(--text-2);
+  padding:22px 16px; display:flex; flex-direction:column; gap:26px;
+  position:sticky; top:0; align-self:flex-start; height:100vh; border-right:1px solid var(--line);
+  overflow-y:auto;
+}
+.sidebar .brand{padding:6px 8px}
+.nav{display:flex; flex-direction:column; gap:3px; flex:1}
+.nav-label{font-size:11.5px; color:var(--text-3); padding:10px 12px 5px; font-weight:500}
+.nav-item{
+  display:flex; align-items:center; gap:11px; padding:11px 13px; border-radius:var(--r-md);
+  color:var(--text-2); font-size:14.5px; font-weight:500; width:100%; text-align:left; transition:background .15s,color .15s;
+}
+.nav-item svg{width:18px;height:18px;flex:none;opacity:.8}
+.nav-item:hover{background:var(--bg-deep); color:var(--navy)}
+.nav-item.active{background:var(--indigo-050); color:var(--indigo-600); font-weight:600}
+.nav-item.active svg{opacity:1}
+.nav-badge{margin-left:auto; background:var(--bg-deep); color:var(--text-2); border-radius:var(--r-pill); font-size:11.5px; padding:1px 8px; font-weight:600}
+.nav-item.active .nav-badge{background:var(--indigo-100); color:var(--indigo-600)}
+.side-user{
+  display:flex; align-items:center; gap:11px; padding:12px; border-radius:var(--r-lg);
+  background:var(--surface-2); border:1px solid var(--line);
+}
+.side-user .avatar{background:var(--navy-soft); width:34px;height:34px;font-size:13px}
+.side-user .nm{font-size:14px; font-weight:600; color:var(--navy); line-height:1.3}
+.side-user .mj{font-size:12px; color:var(--text-3)}
+
+.main{flex:1 1 auto; min-width:0; width:100%; display:flex; flex-direction:column}
+.topbar{
+  display:flex; align-items:center; gap:14px; padding:16px 30px; border-bottom:1px solid var(--line);
+  background:var(--surface); position:sticky; top:0; z-index:40; width:100%; box-sizing:border-box;
+}
+.topbar h2{font-size:18px}
+.topbar .tb-sub{font-size:13px; color:var(--text-3); margin-top:1px}
+.topbar .spacer{flex:1}
+.burger{display:none; width:40px;height:40px;border-radius:var(--r-md); border:1px solid var(--line-strong); align-items:center; justify-content:center; flex:none}
+.burger svg{width:20px;height:20px}
+.content{padding:30px; max-width:1040px; width:100%; margin:0 auto; flex:1; box-sizing:border-box}
+.page{animation:fade .22s ease}
+@keyframes fade{from{opacity:0}to{opacity:1}}
+
+@media (max-width: 980px){
+  #appView{display:block}
+  .sidebar{
+    position:fixed; z-index:120; left:0; top:0; width:264px; flex-basis:264px; max-width:264px;
+    transform:translateX(-102%);
+    transition:transform .22s ease; box-shadow:var(--sh-2);
+  }
+  .sidebar.open{transform:none}
+  .main{width:100%}
+  .burger{display:inline-flex}
+  .topbar{padding:12px 16px}
+  .content{padding:18px 16px 60px}
+  .scrim{position:fixed; inset:0; background:rgba(15,19,36,.5); z-index:110; display:none}
+  .scrim.show{display:block}
+}
+
+/* ---------------------------------------------------------------
+   4. 대시보드
+--------------------------------------------------------------- */
+.hello{
+  border-radius:var(--r-xl); padding:30px 32px; margin-bottom:22px; border:1px solid var(--line);
+  border-left:4px solid var(--indigo);
+  background:var(--surface);
+  box-shadow:var(--sh-1); position:relative; overflow:hidden;
+}
+.hello h2{color:var(--navy); font-size:clamp(21px,2.4vw,27px)}
+.hello p{color:var(--text-2); margin-top:8px; font-size:14.5px; max-width:52ch}
+.hello .hello-cta{margin-top:20px; display:flex; gap:10px; flex-wrap:wrap; position:relative; z-index:2}
+.hello .btn-white{background:var(--indigo); color:#fff}
+.hello .btn-white:hover{background:var(--indigo-600)}
+.hello .btn-line{background:var(--surface); color:var(--navy); border:1px solid var(--line-strong)}
+.hello .btn-line:hover{background:var(--bg-deep)}
+
+.grid-dash{display:grid; grid-template-columns:1fr; gap:20px; align-items:start}
+
+.progress-ring{display:flex; align-items:center; gap:22px}
+.ring{width:104px;height:104px;flex:none; position:relative}
+.ring svg{transform:rotate(-90deg)}
+.ring .val{position:absolute; inset:0; display:grid; place-items:center; font-size:22px; font-weight:600; color:var(--navy)}
+.todo{list-style:none; margin:16px 0 0; padding:0; display:grid; gap:9px}
+.todo li{display:flex; align-items:center; gap:10px; font-size:14px; color:var(--text-2)}
+.tick{width:19px;height:19px;border-radius:var(--r-pill); display:grid; place-items:center; flex:none;
+  background:var(--mint-050); color:var(--mint); font-size:11px; font-weight:700}
+.tick.off{background:var(--bg-deep); color:var(--text-3)}
+.todo li.done{color:var(--text-3); text-decoration:line-through}
+
+.stat-row{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-top:20px}
+.stat{background:var(--surface-2); border:1px solid var(--line); border-radius:var(--r-lg); padding:14px}
+.stat .n{font-size:22px; font-weight:600; color:var(--navy); line-height:1.2}
+.stat .l{font-size:12.5px; color:var(--text-3); margin-top:2px}
+
+.proj-item{
+  display:flex; gap:14px; align-items:flex-start; padding:16px; border-radius:var(--r-lg);
+  border:1px solid var(--line); background:var(--surface-2); transition:border-color .15s, box-shadow .15s;
+}
+.proj-item + .proj-item{margin-top:11px}
+.proj-item:hover{border-color:var(--line-strong); box-shadow:var(--sh-1); cursor:pointer}
+.proj-item .pi-ico{width:42px;height:42px;border-radius:var(--r-md); display:grid; place-items:center;
+  background:var(--bg-deep); color:var(--navy-soft); font-weight:600; flex:none}
+.proj-item h4{font-size:15px}
+.proj-item .meta{font-size:13px; color:var(--text-3); margin-top:3px}
+.bar{height:6px; border-radius:var(--r-pill); background:var(--bg-deep); overflow:hidden; margin-top:10px}
+.bar i{display:block; height:100%; background:var(--indigo); border-radius:inherit}
+
+.empty{
+  text-align:center; padding:40px 20px; border:1.5px dashed var(--line-strong); border-radius:var(--r-lg);
+  color:var(--text-3); font-size:14px; background:var(--surface-2);
+}
+.empty b{display:block; color:var(--navy); font-size:15px; margin-bottom:6px; font-weight:600}
+
+/* ---------------------------------------------------------------
+   5. AI 팀매칭
+--------------------------------------------------------------- */
+.steps{display:flex; align-items:center; gap:8px; margin-bottom:22px; flex-wrap:wrap}
+.step{display:flex; align-items:center; gap:9px; padding:8px 14px 8px 9px; border-radius:var(--r-pill);
+  background:var(--surface); border:1px solid var(--line); font-size:13.5px; color:var(--text-3); cursor:pointer}
+.step .no{width:23px;height:23px;border-radius:var(--r-pill); background:var(--bg-deep); color:var(--text-3);
+  display:grid; place-items:center; font-size:12.5px; font-weight:600}
+.step.on{border-color:var(--indigo); color:var(--navy); font-weight:600; box-shadow:0 0 0 3px var(--indigo-050)}
+.step.on .no{background:var(--indigo); color:#fff}
+.step.done .no{background:var(--mint); color:#fff}
+.step-line{flex:1; height:1px; background:var(--line); min-width:10px}
+@media(max-width:700px){.step-line{display:none} .step{font-size:12.5px; padding:6px 11px 6px 7px}}
+
+input[type=range]{-webkit-appearance:none; appearance:none; width:100%; height:5px; border-radius:var(--r-pill);
+  background:var(--line); outline-offset:6px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none; width:20px;height:20px;border-radius:50%;
+  background:var(--indigo); border:3px solid var(--surface); box-shadow:0 1px 5px rgba(22,34,90,.3); cursor:pointer}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%; background:var(--indigo);
+  border:3px solid var(--surface); box-shadow:0 1px 5px rgba(22,34,90,.3); cursor:pointer}
+
+/* 가중치 — 1~5점 원형 버튼 */
+.weight-row{display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 0; flex-wrap:wrap}
+.weight-row + .weight-row{border-top:1px dashed var(--line)}
+.weight-row .wr-name{font-size:14px; color:var(--navy-soft); font-weight:500}
+.dot-picker{display:flex; align-items:center; gap:7px}
+.dot-picker .dot{width:30px;height:30px;border-radius:50%; border:1.5px solid var(--line-strong);
+  background:var(--surface-2); color:var(--text-3); font-size:12.5px; font-weight:600;
+  display:grid; place-items:center; transition:background .12s, border-color .12s, color .12s, transform .1s; flex:none; cursor:pointer}
+.dot-picker .dot:hover{border-color:var(--line-strong); transform:translateY(-1px)}
+.dot-picker .dot.filled{background:var(--indigo); border-color:var(--indigo); color:#fff}
+.dot-picker .dot.sel{box-shadow:0 0 0 3px var(--indigo-050)}
+.wr-val{font-size:13px; color:var(--indigo-600); font-weight:600; width:34px; text-align:right; flex:none}
+@media(max-width:480px){.dot-picker .dot{width:26px;height:26px;font-size:11.5px}}
+
+.check{display:flex; align-items:flex-start; gap:10px; padding:11px 13px; border-radius:var(--r-md);
+  border:1.5px solid var(--line); background:var(--surface-2); cursor:pointer; transition:.15s}
+.check + .check{margin-top:9px}
+.check:hover{border-color:var(--line-strong)}
+.check input{margin-top:3px; accent-color:var(--indigo); width:16px;height:16px; flex:none}
+.check span{font-size:14px; color:var(--text-2)}
+.check input:checked ~ span{color:var(--navy)}
+
+.wizard-nav{display:flex; justify-content:space-between; gap:12px; margin-top:22px}
+
+/* 준비 완료 토글 스위치 */
+.switch{width:46px;height:27px;border-radius:var(--r-pill); background:var(--line-strong); position:relative;
+  flex:none; transition:background .15s; display:inline-block; cursor:pointer}
+.switch i{position:absolute; top:3px; left:3px; width:21px;height:21px;border-radius:50%; background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.2); transition:transform .18s; display:block}
+.switch[data-on="1"]{background:var(--indigo)}
+.switch[data-on="1"] i{transform:translateX(19px)}
+
+.loading-wrap{display:grid; place-items:center; padding:64px 20px; text-align:center}
+.pulse{width:74px;height:74px;border-radius:24px; background:var(--indigo-050); display:grid; place-items:center;
+  color:var(--indigo); margin-bottom:22px; animation:beat 1.2s ease-in-out infinite}
+.pulse svg{width:32px;height:32px}
+@keyframes beat{0%,100%{transform:scale(1); box-shadow:0 0 0 0 var(--indigo-050)}50%{transform:scale(1.06); box-shadow:0 0 0 14px rgba(74,84,225,.07)}}
+.load-steps{list-style:none; padding:0; margin:14px 0 0; display:grid; gap:8px; font-size:14px; color:var(--text-3); text-align:left}
+.load-steps li{display:flex; gap:9px; align-items:center; opacity:.4; transition:opacity .3s, color .3s}
+.load-steps li.on{opacity:1; color:var(--navy); font-weight:600}
+
+.team-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(310px,1fr)); gap:18px}
+.team-card{padding:22px; border-radius:var(--r-xl); background:var(--surface); border:1px solid var(--line);
+  box-shadow:var(--sh-1); transition:box-shadow .18s, border-color .18s}
+.team-card.mine{border-color:var(--indigo); box-shadow:0 0 0 4px var(--indigo-050), var(--sh-1)}
+.team-card:hover{box-shadow:var(--sh-2)}
+.tc-top{display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:4px}
+.tc-top h4{font-size:16px}
+.score{display:flex; align-items:baseline; gap:3px; font-weight:600; color:var(--mint)}
+.score .s{font-size:22px} .score .t{font-size:12px; color:var(--text-3)}
+.score.mid{color:var(--amber)} .score.low{color:var(--rose)}
+.score-bar{height:5px; border-radius:var(--r-pill); background:var(--bg-deep); overflow:hidden; margin:10px 0 16px}
+.score-bar i{display:block;height:100%; border-radius:inherit; background:var(--mint)}
+.score-bar.mid i{background:var(--amber)} .score-bar.low i{background:var(--rose)}
+.member{display:flex; align-items:center; gap:11px; padding:8px 0}
+.member + .member{border-top:1px dashed var(--line)}
+.member .avatar{width:34px;height:34px;font-size:13px}
+.member .m-nm{font-size:14px; font-weight:500; color:var(--navy)}
+.member .m-mt{font-size:12.5px; color:var(--text-3)}
+.member .m-role{margin-left:auto; font-size:12px}
+.tc-foot{margin-top:14px; padding-top:14px; border-top:1px solid var(--line); display:flex; flex-wrap:wrap; gap:7px}
+.tc-fact{font-size:12.5px; color:var(--text-2); background:var(--surface-2); border:1px solid var(--line);
+  padding:4px 10px; border-radius:var(--r-sm)}
+
+.result-summary{display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px}
+@media(max-width:760px){.result-summary{grid-template-columns:repeat(2,1fr)}}
+
+/* ---------------------------------------------------------------
+   6. 프로필 / 일정 / 프로젝트
+--------------------------------------------------------------- */
+.grid-2{display:grid; grid-template-columns:1.2fr .8fr; gap:20px; align-items:start}
+@media(max-width:880px){.grid-2{grid-template-columns:1fr}}
+
+.skill-row{display:grid; grid-template-columns:1fr 120px 30px; gap:12px; align-items:center; padding:10px 0}
+.skill-row + .skill-row{border-top:1px dashed var(--line)}
+.skill-row .sk-nm{font-size:14px; font-weight:500; color:var(--navy)}
+.lvl{display:flex; gap:4px}
+.lvl button{width:100%; height:12px; border-radius:var(--r-pill); background:var(--bg-deep); transition:background .15s}
+.lvl button.on{background:var(--indigo)}
+.x-btn{width:26px;height:26px;border-radius:var(--r-sm); color:var(--text-3); display:grid; place-items:center; font-size:15px; cursor:pointer}
+.x-btn:hover{background:var(--rose-050); color:var(--rose)}
+.add-skill{display:flex; gap:8px; margin-top:14px}
+.add-skill .input{flex:1}
+
+.trait{padding:12px 0}
+.trait + .trait{border-top:1px dashed var(--line)}
+.trait .t-top{display:flex; justify-content:space-between; font-size:13px; color:var(--text-3); margin-bottom:7px}
+.trait .t-top b{color:var(--navy); font-weight:500; font-size:13.5px}
+
+.sched{width:100%; min-width:620px; border-collapse:separate; border-spacing:5px; margin-top:6px}
+.sched th{font-size:12.5px; color:var(--text-3); font-weight:500; padding-bottom:2px}
+.sched td:first-child, .sched th:first-child{width:74px; text-align:left}
+.sched td:first-child{font-size:12.5px; color:var(--text-2)}
+.slot{width:100%; height:40px; border-radius:var(--r-md); border:1.5px solid var(--line);
+  background:var(--surface-2); font-size:11.5px; color:var(--text-3); transition:.12s; cursor:pointer}
+.slot:hover{border-color:var(--line-strong)}
+.slot[data-s="y"]{background:var(--mint-050); border-color:transparent; color:var(--mint); font-weight:600}
+.slot[data-s="n"]{background:var(--rose-050); border-color:transparent; color:var(--rose); font-weight:600}
+.legend{display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--text-2); margin-top:16px}
+.legend i{width:13px;height:13px;border-radius:4px; display:inline-block; margin-right:6px; vertical-align:-2px}
+@media(max-width:620px){
+  .sched{border-spacing:4px; min-width:600px}
+  .sched td:first-child, .sched th:first-child{width:62px; font-size:11px}
+  .slot{height:36px; font-size:11px}
+}
+.scroll-x{overflow-x:auto; padding-bottom:6px; -webkit-overflow-scrolling:touch}
+.scroll-x::-webkit-scrollbar{height:8px}
+.scroll-x::-webkit-scrollbar-thumb{background:var(--line-strong); border-radius:var(--r-pill)}
+
+.pj-detail-grid{display:grid; grid-template-columns:1fr; gap:18px; align-items:start}
+.agenda{list-style:none; padding:0; margin:0}
+.agenda li{display:flex; gap:11px; align-items:center; padding:11px 0; font-size:14px; color:var(--text-2)}
+.agenda li + li{border-top:1px dashed var(--line)}
+.agenda input{accent-color:var(--indigo); width:17px;height:17px; cursor:pointer}
+.agenda li.done label{text-decoration:line-through; color:var(--text-3)}
+.role-row{display:flex; align-items:center; gap:10px; padding:11px 0; font-size:14px}
+.role-row + .role-row{border-top:1px dashed var(--line)}
+.role-row .r-nm{font-weight:500; color:var(--navy); width:88px; flex:none}
+.role-row .r-who{color:var(--text-2); flex:1}
+.back-link{display:inline-flex; align-items:center; gap:6px; font-size:13.5px; color:var(--text-2); margin-bottom:14px; cursor:pointer}
+.back-link:hover{color:var(--navy)}
+
+.role-switch-bar{
+  margin-top:auto; padding:12px; border-radius:var(--r-lg); background:var(--bg-deep);
+  border:1px solid var(--line); display:flex; flex-direction:column; gap:8px;
+}
+.role-switch-bar span{font-size:12px; color:var(--text-3)}
+</style>
+</head>
+<body>
+
+<!-- ============================ 로그인 / 회원가입 ============================ -->
+<div id="authView">
+  <aside class="auth-brandside">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8" r="3.2"/><circle cx="16.5" cy="15.5" r="3.2"/><path d="M10.8 10.4l3 3"/>
+        </svg>
+      </span>
+      TeamMatch AI
+    </div>
+
+    <div class="auth-copy">
+      <h1>팀 구성을 운이 아니라<em>설계의 문제로.</em></h1>
+      <p class="lead">역량·성향·일정을 함께 읽어 팀을 짜고, 첫 모임 준비까지 한 번에 끝냅니다. 친분이나 선착순에 기대지 않아도 됩니다.</p>
+      <ul class="auth-points">
+        <li><span class="pt-dot">1</span><span><b>설문 3분</b>전공, 희망 역할, 기술, 가능한 시간만 채우면 끝납니다.</span></li>
+        <li><span class="pt-dot">2</span><span><b>AI 매칭</b>정량 조건과 자유 서술 요구사항을 함께 반영합니다.</span></li>
+        <li><span class="pt-dot">3</span><span><b>협업 착수</b>공통 가능 시간, 역할 초안, 첫 모임 아젠다를 자동으로 준비합니다.</span></li>
+      </ul>
+    </div>
+
+    <p class="auth-foot">SWing · DS창업캡스톤디자인1 · 2026학년도 2학기 프로토타입</p>
+  </aside>
+
+  <section class="auth-formside">
+    <div class="auth-card">
+      <!-- 로그인 -->
+      <div id="loginCard" class="card">
+        <h2 id="liTitle">학생 로그인</h2>
+        <p class="card-sub" id="liSub">학교 이메일로 로그인하면 프로필과 설문을 채우고 팀 매칭을 준비할 수 있습니다.</p>
+        <div style="height:22px"></div>
+        <div class="seg" id="liRole">
+          <button aria-pressed="true" data-role="student">학생<small>팀을 찾습니다</small></button>
+          <button aria-pressed="false" data-role="professor">교수<small>팀을 편성합니다</small></button>
+        </div>
+        <div class="field">
+          <label for="liEmail">학교 이메일</label>
+          <input class="input" id="liEmail" type="email" placeholder="doyoon@hanyang.ac.kr" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="liPw">비밀번호</label>
+          <input class="input" id="liPw" type="password" placeholder="비밀번호 입력" autocomplete="current-password">
+        </div>
+        <p class="err" id="liErr">이메일과 비밀번호를 모두 입력하세요.</p>
+        <div style="height:8px"></div>
+        <button class="btn btn-lg" id="loginBtn">로그인</button>
+        <p class="auth-switch">아직 계정이 없나요? <button id="toSignup">회원가입</button></p>
+        <div class="demo-note" id="liDemo">
+          데모 계정 — <b>doyoon@hanyang.ac.kr</b> / 비밀번호 아무거나.<br>서버에 연결되지 않는 프로토타입이라 입력값은 저장되지 않습니다.
+        </div>
+      </div>
+
+      <!-- 회원가입 -->
+      <div id="signupCard" class="card hidden">
+        <h2 id="suTitle">학생 회원가입</h2>
+        <p class="card-sub" id="suSub">가입 후 바로 프로필을 채우고 매칭에 참여할 수 있습니다.</p>
+        <div style="height:22px"></div>
+        <div class="seg" id="suRole">
+          <button aria-pressed="true" data-role="student">학생<small>팀을 찾습니다</small></button>
+          <button aria-pressed="false" data-role="professor">교수<small>팀을 편성합니다</small></button>
+        </div>
+        <div class="field">
+          <label for="suName">이름</label>
+          <input class="input" id="suName" placeholder="김도윤">
+        </div>
+        <div class="field">
+          <label for="suEmail">학교 이메일</label>
+          <input class="input" id="suEmail" type="email" placeholder="doyoon@hanyang.ac.kr">
+        </div>
+        <div class="field">
+          <label for="suPw">비밀번호</label>
+          <input class="input" id="suPw" type="password" placeholder="8자 이상">
+        </div>
+        <div class="row2" id="suRow2">
+          <div class="field">
+            <label for="suMajor" id="suMajorLabel">전공</label>
+            <input class="input" id="suMajor" placeholder="데이터사이언스학과">
+          </div>
+          <div class="field" id="suStudentIdField">
+            <label for="suStudentId">학번</label>
+            <input class="input" id="suStudentId" placeholder="2022123456">
+          </div>
+        </div>
+        <div class="field hidden" id="suSchoolField">
+          <label for="suSchool">학교</label>
+          <input class="input" id="suSchool" value="한양대학교 ERICA">
+        </div>
+        <p class="err" id="suErr">모든 항목을 입력하세요.</p>
+        <div style="height:8px"></div>
+        <button class="btn btn-lg" id="signupBtn">가입 완료</button>
+        <p class="auth-switch">이미 계정이 있나요? <button id="toLogin">로그인</button></p>
+      </div>
+    </div>
+  </section>
+</div>
+
+<!-- ============================ 앱 ============================ -->
+<div id="appView" class="hidden">
+  <div class="scrim" id="scrim"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8.5" cy="8" r="3.2"/><circle cx="16.5" cy="15.5" r="3.2"/><path d="M10.8 10.4l3 3"/>
+        </svg>
+      </span>
+      TeamMatch AI
+    </div>
+
+    <nav class="nav" id="nav"></nav>
+
+    <div class="role-switch-bar">
+      <span id="roleBadgeText">현재: 학생 모드</span>
+      <button class="btn btn-sm btn-ghost" id="quickRoleSwitchBtn" style="width:100%">
+        교수 모드로 전환
+      </button>
+    </div>
+
+    <div>
+      <div class="side-user">
+        <span class="avatar" id="sideAvatar">김</span>
+        <span style="overflow:hidden">
+          <span class="nm" id="sideName" style="display:block; text-overflow:ellipsis; overflow:hidden; white-space:nowrap">김도윤</span>
+          <span class="mj" id="sideMajor" style="display:block; text-overflow:ellipsis; overflow:hidden; white-space:nowrap">데이터사이언스학과 · 3학년</span>
+        </span>
+      </div>
+      <button class="nav-item" id="logoutBtn" style="margin-top:6px">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 8V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2h6a2 2 0 002-2v-2"/><path d="M10 12h10m0 0l-3-3m3 3l-3 3"/></svg>
+        로그아웃
+      </button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="burger" id="burger" aria-label="메뉴 열기">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div>
+        <h2 id="tbTitle">대시보드</h2>
+        <p class="tb-sub" id="tbSub">2026학년도 2학기</p>
+      </div>
+      <span class="spacer"></span>
+      <button class="btn btn-sm" id="tbCta">매칭 준비 확인</button>
+    </header>
+
+    <div class="content" id="content"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =================================================================
+   상태
+================================================================= */
+const DAYS = ["월","화","수","목","금","토","일"];
+const BLOCKS = [
+  ["09–10","오전"],["10–11","오전"],["11–12","오전"],
+  ["12–13","점심"],
+  ["13–14","오후"],["14–15","오후"],["15–16","오후"],["16–17","오후"],["17–18","오후"],
+  ["18–19","저녁"],["19–20","저녁"],["20–21","저녁"]
+];
+const ROLES = ["기획","프론트엔드","백엔드","데이터","디자인","발표"];
+
+const state = {
+  loggedIn:false,
+  role:"student",
+  page:"dashboard",
+  matchingStep:1,
+  selectedProjectId:null,
+  prof:{
+    name:"한지원", email:"jiwon.han@hanyang.ac.kr", dept:"데이터사이언스학과", school:"한양대학교 ERICA",
+    classes:[
+      {id:"c1", name:"DS창업캡스톤디자인1", code:"MAT2082", term:"2026학년도 2학기", cap:45, join:"A7X9K2",
+       deadline:"2026-09-20 23:59", submitted:38, kind:"개발 프로젝트", status:"편성 대기", teams:0},
+      {id:"c2", name:"데이터마이닝", code:"ITE3082", term:"2026학년도 2학기", cap:32, join:"K2M4P8",
+       deadline:"2026-09-12 23:59", submitted:32, kind:"학술 세미나", status:"편성 완료", teams:8},
+      {id:"c3", name:"머신러닝개론", code:"ITE2013", term:"2026학년도 2학기", cap:41, join:"Q9F1V5",
+       deadline:"2026-09-26 23:59", submitted:12, kind:"개발 프로젝트", status:"설문 진행 중", teams:0}
+    ],
+    current:"c1",
+    setup:{ size:4, weights:{major:4, role:5, time:3, trait:3},
+      hard:{sameMajor:true, fixPair:false, splitPair:true, evenTransfer:false},
+      note:"발표 경험이 있는 학생과 개발 경험이 있는 학생을 각 팀에 최소 1명씩 포함해 주세요. 4학년은 한 팀에 몰리지 않게 해주세요.",
+      parsed:[true,true,true] },
+    activePreset:"ps0",
+    presets:[
+      {id:"ps0", name:"균형 배분", desc:"네 항목을 고르게 반영하는 기본값", own:false,
+       size:4, weights:{major:3,role:3,time:3,trait:3}, hard:{sameMajor:true,fixPair:false,splitPair:false,evenTransfer:false}},
+      {id:"ps1", name:"전공 다양성 우선", desc:"융합 프로젝트처럼 학과가 섞여야 하는 수업", own:false,
+       size:4, weights:{major:5,role:4,time:2,trait:2}, hard:{sameMajor:true,fixPair:false,splitPair:false,evenTransfer:true}},
+      {id:"ps2", name:"역량 균형 우선", desc:"개발·기획 역할이 팀마다 고루 필요한 수업", own:false,
+       size:4, weights:{major:3,role:5,time:3,trait:2}, hard:{sameMajor:false,fixPair:false,splitPair:false,evenTransfer:false}},
+      {id:"ps3", name:"일정 우선", desc:"모일 시간을 맞추기 어려운 야간·대형 수업", own:false,
+       size:5, weights:{major:2,role:3,time:5,trait:2}, hard:{sameMajor:false,fixPair:false,splitPair:false,evenTransfer:false}},
+      {id:"ps4", name:"성향 중심", desc:"한 학기 내내 함께 가는 장기 프로젝트", own:false,
+       size:4, weights:{major:2,role:3,time:3,trait:5}, hard:{sameMajor:true,fixPair:false,splitPair:true,evenTransfer:false}}
+    ],
+    result:null,
+    tas:[{n:"이수민", m:"데이터사이언스학과 대학원", email:"sumin.lee@hanyang.ac.kr", date:"2026-09-01"}],
+    found:null
+  },
+  user:{
+    name:"김도윤", email:"doyoon@hanyang.ac.kr", major:"데이터사이언스학과", year:"3학년", studentId:"2022123456",
+    bio:"프론트엔드 개발에 관심이 많고, React로 사이드 프로젝트를 두 번 진행했습니다. 팀에서는 일정 관리도 함께 맡아본 적이 있습니다.",
+    roles:["프론트엔드","기획"],
+    skills:[{n:"React",l:4},{n:"Python",l:3},{n:"Figma",l:2},{n:"Git",l:3}],
+    traits:{ pace:3, prep:2, lead:4, comm:3 },
+    schedule:{},
+    matchReady:true,
+    enrolledClassId:"c1"
+  },
+  projects:[
+    { id:"p1", name:"캠퍼스 중고거래 리뉴얼", course:"DS창업캡스톤디자인1", members:4, progress:35, status:"진행 중",
+      team:[{n:"김도윤",m:"데이터사이언스 · 3학년",r:"프론트엔드"},{n:"이민준",m:"전기전자공학 · 3학년",r:"백엔드"},
+            {n:"박지수",m:"SW융합 · 2학년",r:"기획"},{n:"최준서",m:"AI소프트웨어 · 2학년",r:"데이터"}],
+      agenda:[true,true,false,false] },
+    { id:"p2", name:"교내 식단 추천 서비스", course:"데이터마이닝", members:3, progress:72, status:"진행 중",
+      team:[{n:"김도윤",m:"데이터사이언스 · 3학년",r:"데이터"},{n:"정서연",m:"경영학 · 3학년",r:"기획"},
+            {n:"한소희",m:"시각디자인 · 2학년",r:"디자인"}],
+      agenda:[true,true,true,true] }
+  ]
+};
+
+/* 기본 일정 데모값 (1시간 단위) */
+(function seed(){
+  const yes = ["월-5","월-6","화-1","화-5","화-6","화-7","수-6","수-7","목-0","목-5","금-6","토-5","토-6"];
+  const no  = ["월-0","수-0","금-0","금-9","일-0","일-1","일-2","일-3","일-4","일-5","일-6","일-7","일-8","일-9","일-10","일-11"];
+  DAYS.forEach(d=>BLOCKS.forEach((_,i)=>{ state.user.schedule[d+"-"+i] = yes.includes(d+"-"+i)?"y":(no.includes(d+"-"+i)?"n":""); }));
+})();
+
+/* 데모 학생 풀 */
+const POOL = [
+  {n:"이민준",m:"전기전자공학",y:3,r:"백엔드",s:["Java","SQL"],t:"마감 집중형",av:8},
+  {n:"박지수",m:"SW융합",y:2,r:"기획",s:["Notion","Figma"],t:"미리 준비형",av:11},
+  {n:"최준서",m:"AI소프트웨어",y:2,r:"데이터",s:["Python","SQL"],t:"신속한 결정",av:9},
+  {n:"정서연",m:"경영학",y:3,r:"기획",s:["Excel","Notion"],t:"충분한 논의",av:7},
+  {n:"한소희",m:"시각디자인",y:2,r:"디자인",s:["Figma","Illustrator"],t:"미리 준비형",av:10},
+  {n:"오지훈",m:"컴퓨터공학",y:4,r:"프론트엔드",s:["React","TypeScript"],t:"주도적 진행",av:6},
+  {n:"윤채원",m:"수리데이터사이언스",y:2,r:"백엔드",s:["Python","Django"],t:"충분한 논의",av:12},
+  {n:"송지원",m:"경영학",y:2,r:"발표",s:["Keynote","Excel"],t:"신속한 결정",av:9},
+  {n:"백준혁",m:"전기전자공학",y:4,r:"프론트엔드",s:["Vue","JS"],t:"마감 집중형",av:7},
+  {n:"강다은",m:"SW융합",y:3,r:"백엔드",s:["Node","SQL"],t:"미리 준비형",av:11},
+  {n:"임도현",m:"AI소프트웨어",y:3,r:"데이터",s:["Python","PyTorch"],t:"주도적 진행",av:8},
+  {n:"서민재",m:"미디어커뮤니케이션",y:2,r:"발표",s:["Premiere","Notion"],t:"충분한 논의",av:10},
+  {n:"노하린",m:"산업경영공학",y:3,r:"기획",s:["Excel","SQL"],t:"미리 준비형",av:9},
+  {n:"장우진",m:"컴퓨터공학",y:2,r:"데이터",s:["Python","Pandas"],t:"신속한 결정",av:12},
+  {n:"문가영",m:"시각디자인",y:3,r:"디자인",s:["Figma","Webflow"],t:"주도적 진행",av:8}
+];
+
+/* 수강생 명단(교수 화면용) */
+const EXTRA = ["김서준","이하윤","박시우","최예린","정우성","한지민","윤서진","조민석","신아름","배준호",
+               "홍가온","권나연","황태현","안유진","류현서","남도윤","심채은","고은비","표지훈","하연우",
+               "손예слав","진하람","차은우","구민서","조하늘","방시현","엄정후","우지안","선우재","도하영"];
+const ROSTER = (()=>{
+  const list=[];
+  const pool = POOL.concat(EXTRA.filter(n=>/^[가-힣]+$/.test(n)).map((n,i)=>({
+    n, m:["SW융합","경영학","컴퓨터공학","시각디자인","전기전자공학","수리데이터사이언스","AI소프트웨어","미디어커뮤니케이션"][i%8],
+    y:(i%4)+1, r:ROLES[i%6], s:[], t:"", av:6+(i%7)
+  })));
+  pool.forEach((p,i)=>{
+    const done = i%6!==1 && i%11!==4;
+    list.push({ id:2024000001+i, n:p.n, m:p.m+"학과", y:p.y, role:p.r,
+      state: done?"제출 완료":(i%11===4?"미제출 · 리마인드 1회":"미제출"),
+      at: done?`09.${10+(i%9)} ${9+(i%9)}:${(i*7)%6}${(i*3)%10}`:"—", done });
+  });
+  return list;
+})();
+
+/* =================================================================
+   유틸
+================================================================= */
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+const el = (h)=>{ const t=document.createElement("template"); t.innerHTML=h.trim(); return t.content.firstElementChild; };
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2200); }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+function initial(n){ return (n||"?").trim().charAt(0); }
+
+function profileScore(){
+  const u=state.user; let s=0;
+  if(u.name&&u.major&&u.year) s+=25;
+  if(u.bio && u.bio.length>=30) s+=20;
+  if(u.roles.length) s+=15;
+  if(u.skills.length>=3) s+=20;
+  const filled = Object.values(u.schedule).filter(Boolean).length;
+  if(filled>=8) s+=20; else if(filled>0) s+=10;
+  return Math.min(100,s);
+}
+function profileTodos(){
+  const u=state.user; const filled=Object.values(u.schedule).filter(Boolean).length;
+  return [
+    {t:"기본 정보 입력", ok:!!(u.name&&u.major&&u.year)},
+    {t:"자기소개 30자 이상 작성", ok:(u.bio||"").length>=30},
+    {t:"선호 역할 선택", ok:u.roles.length>0},
+    {t:"기술 3개 이상 등록", ok:u.skills.length>=3},
+    {t:"주간 가능 시간 표시", ok:filled>=8}
+  ];
+}
+
+/* =================================================================
+   인증
+================================================================= */
+let authRole = "student";
+function setRole(r){
+  authRole = r;
+  $$("#liRole button, #suRole button").forEach(b=>
+    b.setAttribute("aria-pressed", String(b.dataset.role===r)));
+  const prof = r==="professor";
+  $("#liTitle").textContent = prof ? "교수 로그인" : "학생 로그인";
+  $("#suTitle").textContent = prof ? "교수 회원가입" : "학생 회원가입";
+  $("#liSub").textContent = prof
+    ? "학교 이메일로 로그인하면 수업을 개설하고 팀을 편성할 수 있습니다."
+    : "학교 이메일로 로그인하면 프로필과 설문을 채우고 팀 매칭을 준비할 수 있습니다.";
+  $("#liDemo").innerHTML = prof
+    ? '데모 계정 — <b>jiwon.han@hanyang.ac.kr</b> / 비밀번호 아무거나.<br>교수 화면에는 수업 3개와 수강생 명단이 미리 들어 있습니다.'
+    : '데모 계정 — <b>doyoon@hanyang.ac.kr</b> / 비밀번호 아무거나.<br>서버에 연결되지 않는 프로토타입이라 입력값은 저장되지 않습니다.';
+  $("#liEmail").placeholder = prof ? "jiwon.han@hanyang.ac.kr" : "doyoon@hanyang.ac.kr";
+  $("#suSub").textContent = prof
+    ? "가입 후 수업을 개설하고 참여 코드를 학생에게 전달하세요."
+    : "가입 후 바로 프로필을 채우고 매칭에 참여할 수 있습니다.";
+  $("#suName").placeholder = prof ? "한지원" : "김도윤";
+  $("#suEmail").placeholder = prof ? "jiwon.han@hanyang.ac.kr" : "doyoon@hanyang.ac.kr";
+  $("#suMajorLabel").textContent = prof ? "소속 학과" : "전공";
+  $("#suStudentIdField").classList.toggle("hidden", prof);
+  $("#suSchoolField").classList.toggle("hidden", !prof);
+  $("#suRow2").style.gridTemplateColumns = prof ? "1fr" : "1fr 1fr";
+}
+$$("#liRole button, #suRole button").forEach(b=>b.onclick=()=>setRole(b.dataset.role));
+
+$("#toSignup").onclick = ()=>{ $("#loginCard").classList.add("hidden"); $("#signupCard").classList.remove("hidden"); };
+$("#toLogin").onclick  = ()=>{ $("#signupCard").classList.add("hidden"); $("#loginCard").classList.remove("hidden"); };
+
+$("#loginBtn").onclick = ()=>{
+  const em=$("#liEmail").value.trim(), pw=$("#liPw").value;
+  if(!em || !pw){ $("#liErr").textContent="이메일과 비밀번호를 모두 입력하세요."; $("#liErr").classList.add("show"); return; }
+  if(!em.includes("@")){ $("#liErr").textContent="학교 이메일 형식으로 입력하세요."; $("#liErr").classList.add("show"); return; }
+  $("#liErr").classList.remove("show");
+  state.role = authRole;
+  if(authRole==="professor") state.prof.email = em; else state.user.email = em;
+  state.loggedIn = true;
+  $("#authView").classList.add("hidden");
+  $("#appView").classList.remove("hidden");
+  renderNav(); syncSideUser();
+  go(authRole==="professor"?"prof_classes":"dashboard");
+  toast(`${authRole==="professor"? state.prof.name+" 교수님" : state.user.name+"님"}, 환영합니다.`);
+};
+$("#liPw").addEventListener("keydown", e=>{ if(e.key==="Enter") $("#loginBtn").click(); });
+
+$("#signupBtn").onclick = ()=>{
+  const n=$("#suName").value.trim(), em=$("#suEmail").value.trim(), pw=$("#suPw").value,
+        mj=$("#suMajor").value.trim(), sid=$("#suStudentId").value.trim();
+  const prof = authRole==="professor";
+  if(!n||!em||!pw||!mj||(!prof && !sid)){ $("#suErr").textContent="모든 항목을 입력하세요."; $("#suErr").classList.add("show"); return; }
+  if(pw.length<8){ $("#suErr").textContent="비밀번호는 8자 이상이어야 합니다."; $("#suErr").classList.add("show"); return; }
+  $("#suErr").classList.remove("show");
+  if(prof) Object.assign(state.prof,{name:n,email:em,dept:mj,school:$("#suSchool").value.trim()});
+  else Object.assign(state.user,{name:n,email:em,major:mj,studentId:sid});
+  $("#signupCard").classList.add("hidden"); $("#loginCard").classList.remove("hidden");
+  $("#liEmail").value = em; $("#liPw").value="";
+  $("#liPw").focus();
+  toast("가입이 완료되었습니다. 로그인해 주세요.");
+};
+
+$("#logoutBtn").onclick = ()=>{
+  state.loggedIn=false;
+  $("#appView").classList.add("hidden"); $("#authView").classList.remove("hidden");
+  $("#signupCard").classList.add("hidden"); $("#loginCard").classList.remove("hidden");
+  $("#sidebar").classList.remove("open"); $("#scrim").classList.remove("show");
+  toast("로그아웃되었습니다.");
+};
+
+/* 빠른 역할 전환 버튼 */
+$("#quickRoleSwitchBtn").onclick = ()=>{
+  state.role = state.role==="student" ? "professor" : "student";
+  renderNav(); syncSideUser();
+  go(state.role==="student" ? "dashboard" : "prof_classes");
+  toast(`화면을 [${state.role==="student"?"학생":"교수"}] 모드로 전환했습니다.`);
+};
+
+/* 모바일 메뉴 */
+$("#burger").onclick = ()=>{ $("#sidebar").classList.add("open"); $("#scrim").classList.add("show"); };
+$("#scrim").onclick = ()=>{ $("#sidebar").classList.remove("open"); $("#scrim").classList.remove("show"); };
+
+function syncSideUser(){
+  const prof = state.role==="professor";
+  const name = prof ? state.prof.name : state.user.name;
+  const major = prof ? `${state.prof.dept} · 교수` : `${state.user.major} · ${state.user.year}`;
+  $("#sideAvatar").textContent = initial(name);
+  $("#sideName").textContent = name;
+  $("#sideMajor").textContent = major;
+  $("#roleBadgeText").textContent = prof ? "현재: 교수 모드" : "현재: 학생 모드";
+  $("#quickRoleSwitchBtn").textContent = prof ? "학생 모드로 전환" : "교수 모드로 전환";
+}
+
+/* =================================================================
+   내비게이션 & 라우터
+================================================================= */
+const NAV_STUDENT = [
+  { id:"dashboard", label:"대시보드", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>` },
+  { id:"profile", label:"내 프로필", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>` },
+  { id:"schedule", label:"내 시간표", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>` },
+  { id:"matching", label:"AI 팀 매칭", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`, badge:"진행중" },
+  { id:"projects", label:"진행 프로젝트", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>` }
+];
+
+const NAV_PROF = [
+  { id:"prof_classes", label:"수업 관리", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>` },
+  { id:"prof_roster", label:"수강생 & 설문 현황", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>`, badge:"38명" },
+  { id:"prof_setup", label:"팀 매칭 조건 설정", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>` },
+  { id:"prof_results", label:"AI 팀 편성 결과", icon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>` }
+];
+
+function renderNav(){
+  const nav = $("#nav"); nav.innerHTML="";
+  const items = state.role==="professor" ? NAV_PROF : NAV_STUDENT;
+  
+  const label = el(`<div class="nav-label">${state.role==="professor"?"교수자 메뉴":"학습자 메뉴"}</div>`);
+  nav.appendChild(label);
+
+  items.forEach(it=>{
+    const b = el(`
+      <button class="nav-item ${state.page===it.id?'active':''}" data-id="${it.id}">
+        ${it.icon}
+        <span>${it.label}</span>
+        ${it.badge ? `<span class="nav-badge">${it.badge}</span>`:''}
+      </button>
+    `);
+    b.onclick = ()=>{ go(it.id); };
+    nav.appendChild(b);
+  });
+}
+
+function go(pageId, extraParam){
+  state.page = pageId;
+  $$(".nav-item").forEach(b=>b.classList.toggle("active", b.dataset.id===pageId));
+  $("#sidebar").classList.remove("open");
+  $("#scrim").classList.remove("show");
+
+  const curClass = state.prof.classes.find(c=>c.id===state.prof.current) || state.prof.classes[0];
+
+  const cta = $("#tbCta");
+  cta.onclick = null;
+  cta.style.display = "inline-flex";
+
+  if(pageId==="dashboard"){
+    $("#tbTitle").textContent = "학생 대시보드";
+    $("#tbSub").textContent = "2026학년도 2학기 · DS창업캡스톤디자인1";
+    cta.textContent = "매칭 준비 확인";
+    cta.onclick = ()=>go("matching");
+    renderDashboard();
+  } else if(pageId==="profile"){
+    $("#tbTitle").textContent = "내 프로필 및 역량";
+    $("#tbSub").textContent = "매칭 알고리즘이 팀원 간의 역할 분담과 역량을 계산할 때 활용됩니다.";
+    cta.textContent = "프로필 저장";
+    cta.onclick = ()=>saveProfile();
+    renderProfile();
+  } else if(pageId==="schedule"){
+    $("#tbTitle").textContent = "주간 가능 시간표";
+    $("#tbSub").textContent = "팀원들과 정기적인 모임 및 협업이 가능한 시간대를 지정하세요.";
+    cta.textContent = "시간표 저장";
+    cta.onclick = ()=>{ toast("시간표가 저장되었습니다."); };
+    renderSchedule();
+  } else if(pageId==="matching"){
+    $("#tbTitle").textContent = "AI 팀 매칭 신청 및 결과";
+    $("#tbSub").textContent = "설문 데이터와 시간표를 분석하여 최적의 팀을 추천받습니다.";
+    cta.textContent = "내 프로필 점검";
+    cta.onclick = ()=>go("profile");
+    renderMatching(extraParam || state.matchingStep || 1);
+  } else if(pageId==="projects"){
+    $("#tbTitle").textContent = "진행 프로젝트";
+    $("#tbSub").textContent = "현재 참여 중인 캡스톤 및 팀 프로젝트 목록";
+    cta.textContent = "첫 모임 체크리스트";
+    cta.onclick = ()=>{ if(state.projects.length) go("project_detail", state.projects[0].id); };
+    renderProjects();
+  } else if(pageId==="project_detail"){
+    const pj = state.projects.find(p=>p.id===extraParam) || state.projects[0];
+    $("#tbTitle").textContent = pj ? pj.name : "프로젝트 상세";
+    $("#tbSub").textContent = pj ? `${pj.course} · 팀원 ${pj.members}명` : "";
+    cta.textContent = "프로젝트 목록으로";
+    cta.onclick = ()=>go("projects");
+    renderProjectDetail(pj.id);
+  } else if(pageId==="prof_classes"){
+    $("#tbTitle").textContent = "수업 관리";
+    $("#tbSub").textContent = `${state.prof.school} · ${state.prof.name} 교수`;
+    cta.textContent = "+ 새 수업 개설";
+    cta.onclick = ()=>openNewClassModal();
+    renderProfClasses();
+  } else if(pageId==="prof_roster"){
+    $("#tbTitle").textContent = "수강생 명단 및 설문 현황";
+    $("#tbSub").textContent = `${curClass.name} (${curClass.code}) · 참여 코드 ${curClass.join}`;
+    cta.textContent = "미제출자 리마인드 발송";
+    cta.onclick = ()=>{ toast("미제출 학생 6명에게 알림톡과 이메일이 발송되었습니다."); };
+    renderProfRoster();
+  } else if(pageId==="prof_setup"){
+    $("#tbTitle").textContent = "팀 매칭 조건 및 가중치 설정";
+    $("#tbSub").textContent = `${curClass.name} · 가중치와 제약조건을 조합하여 최적의 팀 구성을 설계합니다.`;
+    cta.textContent = "AI 팀 매칭 실행";
+    cta.onclick = ()=>runAiMatching();
+    renderProfSetup();
+  } else if(pageId==="prof_results"){
+    $("#tbTitle").textContent = "AI 팀 편성 결과";
+    $("#tbSub").textContent = `${curClass.name} · 9개 팀 편성 완료 (평균 적합도 93.8점)`;
+    cta.textContent = "편성 확정 및 학생 공개";
+    cta.onclick = ()=>{
+      curClass.status = "편성 완료";
+      curClass.teams = 9;
+      toast("팀 편성이 확정되어 학생들에게 공개되었습니다!");
+      go("prof_classes");
+    };
+    renderProfResults(extraParam===true);
+  }
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+/* =================================================================
+   1. 학생 화면 구현
+================================================================= */
+function renderDashboard(){
+  const score = profileScore();
+  const todos = profileTodos();
+  const filledSlots = Object.values(state.user.schedule).filter(v=>v==="y").length;
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="hello">
+        <h2>반가워요, ${esc(state.user.name)}님! 👋</h2>
+        <p>현재 <b>DS창업캡스톤디자인1</b> 팀 매칭 설문 접수 중입니다. 프로필과 시간표를 채우고 매칭 준비를 완료해 주세요.</p>
+        <div class="hello-cta">
+          <button class="btn btn-white" onclick="go('matching', 1)">팀 매칭 준비 확인</button>
+          <button class="btn btn-line" onclick="go('schedule')">내 시간표 등록 (${filledSlots}시간 표시됨)</button>
+          <button class="btn btn-line" onclick="go('profile')">프로필 편집</button>
+        </div>
+      </div>
+
+      <div class="stat-row">
+        <div class="stat">
+          <div class="n">${score}%</div>
+          <div class="l">프로필 완성도</div>
+        </div>
+        <div class="stat">
+          <div class="n">${filledSlots}개</div>
+          <div class="l">주간 가능 시간대</div>
+        </div>
+        <div class="stat">
+          <div class="n">${state.user.roles.length}개</div>
+          <div class="l">희망 역할 (${esc(state.user.roles.join(', ') || '미정')})</div>
+        </div>
+      </div>
+
+      <div style="height:20px"></div>
+
+      <div class="grid-2">
+        <div class="card card-pad">
+          <div class="card-head">
+            <div>
+              <div class="card-title">내 매칭 준비 상태</div>
+              <div class="card-sub">모든 항목이 채워지면 AI가 최적의 팀원을 우선 탐색합니다.</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px">
+              <span style="font-size:13px; color:var(--text-2); font-weight:500">매칭 준비 완료</span>
+              <div class="switch" id="readySwitch" data-on="${state.user.matchReady?1:0}"><i></i></div>
+            </div>
+          </div>
+
+          <div class="progress-ring">
+            <div class="ring">
+              <svg width="104" height="104">
+                <circle cx="52" cy="52" r="44" stroke="var(--bg-deep)" stroke-width="8" fill="none"/>
+                <circle cx="52" cy="52" r="44" stroke="var(--indigo)" stroke-width="8" fill="none"
+                  stroke-dasharray="276" stroke-dashoffset="${276 - (276 * score / 100)}" stroke-linecap="round"/>
+              </svg>
+              <div class="val">${score}%</div>
+            </div>
+            <div style="flex:1">
+              <ul class="todo">
+                ${todos.map(t=>`
+                  <li class="${t.ok?'done':''}">
+                    <span class="tick ${t.ok?'':'off'}">${t.ok?'✓':'·'}</span>
+                    <span>${t.t}</span>
+                  </li>
+                `).join('')}
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="card-head">
+            <div>
+              <div class="card-title">진행 중인 프로젝트</div>
+              <div class="card-sub">배정된 팀 및 진행 현황</div>
+            </div>
+            <button class="btn btn-sm btn-ghost" onclick="go('projects')">전체보기</button>
+          </div>
+
+          ${state.projects.map(p=>`
+            <div class="proj-item" onclick="go('project_detail', '${p.id}')">
+              <div class="pi-ico">${p.name.charAt(0)}</div>
+              <div style="flex:1; min-width:0">
+                <div style="display:flex; align-items:center; justify-content:space-between">
+                  <h4 style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis">${esc(p.name)}</h4>
+                  <span class="tag tag-mint">${p.progress}%</span>
+                </div>
+                <div class="meta">${esc(p.course)} · 팀원 ${p.members}명</div>
+                <div class="bar"><i style="width:${p.progress}%"></i></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+
+  $("#readySwitch").onclick = function(){
+    state.user.matchReady = !state.user.matchReady;
+    this.dataset.on = state.user.matchReady ? "1" : "0";
+    toast(state.user.matchReady ? "매칭 준비 완료 상태로 변경되었습니다." : "매칭 준비 중으로 전환되었습니다.");
+  };
+}
+
+function renderProfile(){
+  const u = state.user;
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="grid-2">
+        <div class="card card-pad">
+          <div class="card-title" style="margin-bottom:16px">기본 정보 & 희망 역할</div>
+          <div class="row2">
+            <div class="field">
+              <label>이름</label>
+              <input class="input" id="pfName" value="${esc(u.name)}">
+            </div>
+            <div class="field">
+              <label>학번</label>
+              <input class="input" id="pfSid" value="${esc(u.studentId)}">
+            </div>
+          </div>
+          <div class="row2">
+            <div class="field">
+              <label>전공</label>
+              <input class="input" id="pfMajor" value="${esc(u.major)}">
+            </div>
+            <div class="field">
+              <label>학년</label>
+              <select class="select" id="pfYear">
+                <option ${u.year==='1학년'?'selected':''}>1학년</option>
+                <option ${u.year==='2학년'?'selected':''}>2학년</option>
+                <option ${u.year==='3학년'?'selected':''}>3학년</option>
+                <option ${u.year==='4학년'?'selected':''}>4학년</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field">
+            <label>자기소개 및 강점 (최소 30자 권장)</label>
+            <textarea class="textarea" id="pfBio" placeholder="자신의 개발/기획 경험, 팀 프로젝트에서 기여할 수 있는 점을 적어주세요.">${esc(u.bio)}</textarea>
+            <div class="help" id="bioCount">현재 ${u.bio.length}자 입력됨</div>
+          </div>
+
+          <div class="field">
+            <label>희망 역할 (복수 선택 가능)</label>
+            <div class="chips" id="roleChips">
+              ${ROLES.map(r=>`
+                <button class="chip" data-role="${r}" aria-pressed="${u.roles.includes(r)?'true':'false'}">
+                  ${r}
+                </button>
+              `).join('')}
+            </div>
+          </div>
+
+          <div style="height:14px"></div>
+          <div class="card-title" style="margin-bottom:12px">보유 기술 및 숙련도</div>
+          <div id="skillsList">
+            ${u.skills.map((sk,idx)=>`
+              <div class="skill-row" data-idx="${idx}">
+                <div class="sk-nm">${esc(sk.n)}</div>
+                <div class="lvl">
+                  ${[1,2,3,4,5].map(lv=>`
+                    <button class="${lv<=sk.l?'on':''}" onclick="setSkillLevel(${idx},${lv})" title="레벨 ${lv}"></button>
+                  `).join('')}
+                </div>
+                <div class="x-btn" onclick="removeSkill(${idx})">✕</div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="add-skill">
+            <input class="input" id="newSkillName" placeholder="기술명 추가 (예: Flutter, SQL, Node.js)">
+            <button class="btn btn-sm btn-ghost" onclick="addSkill()">추가</button>
+          </div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="card-title" style="margin-bottom:16px">협업 성향 지표</div>
+          <div class="card-sub" style="margin-bottom:20px">자신과 잘 맞는 페이스의 팀원을 찾기 위해 솔직하게 선택해 주세요.</div>
+
+          <div class="trait">
+            <div class="t-top">
+              <span>작업 페이스</span>
+              <b>${u.traits.pace<=2?'마감 집중형':(u.traits.pace>=4?'미리 완료형':'균형형')}</b>
+            </div>
+            <input type="range" min="1" max="5" value="${u.traits.pace}" id="trPace">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-3); margin-top:4px">
+              <span>마감 직전 집중</span><span>마감 전 미리 완성</span>
+            </div>
+          </div>
+
+          <div class="trait">
+            <div class="t-top">
+              <span>의사결정 스타일</span>
+              <b>${u.traits.prep<=2?'신속한 결정':'충분한 논의'}</b>
+            </div>
+            <input type="range" min="1" max="5" value="${u.traits.prep}" id="trPrep">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-3); margin-top:4px">
+              <span>신속한 결정</span><span>충분한 데이터·논의</span>
+            </div>
+          </div>
+
+          <div class="trait">
+            <div class="t-top">
+              <span>팀 내 주도성</span>
+              <b>${u.traits.lead<=2?'묵묵한 서포트':(u.traits.lead>=4?'주도적 리드':'중간 조율')}</b>
+            </div>
+            <input type="range" min="1" max="5" value="${u.traits.lead}" id="trLead">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-3); margin-top:4px">
+              <span>서포트 및 실행</span><span>주도적 리더십</span>
+            </div>
+          </div>
+
+          <div class="trait">
+            <div class="t-top">
+              <span>소통 빈도</span>
+              <b>${u.traits.comm<=2?'이슈 발생 시':'수시로 공유'}</b>
+            </div>
+            <input type="range" min="1" max="5" value="${u.traits.comm}" id="trComm">
+            <div style="display:flex; justify-content:space-between; font-size:11px; color:var(--text-3); margin-top:4px">
+              <span>정기 회의 중심</span><span>메신저 수시 공유</span>
+            </div>
+          </div>
+
+          <div style="margin-top:28px">
+            <button class="btn btn-lg" onclick="saveProfile()">프로필 저장 완료</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $("#pfBio").oninput = (e)=>{
+    $("#bioCount").textContent = `현재 ${e.target.value.length}자 입력됨 (30자 이상 권장)`;
+  };
+
+  $$("#roleChips button").forEach(b=>{
+    b.onclick = ()=>{
+      const role = b.dataset.role;
+      const on = b.getAttribute("aria-pressed")==="true";
+      b.setAttribute("aria-pressed", on ? "false" : "true");
+      if(on){
+        state.user.roles = state.user.roles.filter(r=>r!==role);
+      } else {
+        if(!state.user.roles.includes(role)) state.user.roles.push(role);
+      }
+    };
+  });
+}
+
+function setSkillLevel(idx, lv){
+  state.user.skills[idx].l = lv;
+  renderProfile();
+}
+function removeSkill(idx){
+  state.user.skills.splice(idx, 1);
+  renderProfile();
+}
+function addSkill(){
+  const nm = $("#newSkillName").value.trim();
+  if(!nm){ toast("기술 이름을 입력하세요."); return; }
+  state.user.skills.push({n:nm, l:3});
+  renderProfile();
+}
+function saveProfile(){
+  const u = state.user;
+  u.name = $("#pfName").value.trim() || u.name;
+  u.studentId = $("#pfSid").value.trim() || u.studentId;
+  u.major = $("#pfMajor").value.trim() || u.major;
+  u.year = $("#pfYear").value;
+  u.bio = $("#pfBio").value.trim();
+  u.traits.pace = parseInt($("#trPace").value);
+  u.traits.prep = parseInt($("#trPrep").value);
+  u.traits.lead = parseInt($("#trLead").value);
+  u.traits.comm = parseInt($("#trComm").value);
+  syncSideUser();
+  toast("프로필이 성공적으로 저장되었습니다!");
+}
+
+function renderSchedule(){
+  const yesCount = Object.values(state.user.schedule).filter(v=>v==="y").length;
+  const noCount  = Object.values(state.user.schedule).filter(v=>v==="n").length;
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="card card-pad">
+        <div class="card-head">
+          <div>
+            <div class="card-title">주간 가능 시간표 매트릭스</div>
+            <div class="card-sub">칸을 클릭하여 <b>가능(초록)</b>, <b>불가(빨강)</b>, <b>미지정(회색)</b> 상태로 전환합니다.</div>
+          </div>
+          <div style="display:flex; gap:8px; flex-wrap:wrap">
+            <button class="btn btn-sm btn-ghost" onclick="presetSchedule('evenings')">평일 저녁 전체 가능</button>
+            <button class="btn btn-sm btn-ghost" onclick="presetSchedule('weekends')">주말 전체 가능</button>
+            <button class="btn btn-sm btn-ghost" onclick="presetSchedule('clear')">초기화</button>
+            <button class="btn btn-sm" onclick="toast('시간표가 저장되었습니다.')">저장하기</button>
+          </div>
+        </div>
+
+        <div class="legend">
+          <span><i style="background:var(--mint-050); border:1px solid var(--mint)"></i> 회의/작업 가능</span>
+          <span><i style="background:var(--rose-050); border:1px solid var(--rose)"></i> 모임 불가</span>
+          <span><i style="background:var(--surface-2); border:1px solid var(--line-strong)"></i> 미지정 (조율 가능)</span>
+          <span style="margin-left:auto; font-weight:600; color:var(--indigo-600)">현재 가능 시간: ${yesCount}시간 / 불가: ${noCount}시간</span>
+        </div>
+
+        <div class="scroll-x">
+          <table class="sched">
+            <thead>
+              <tr>
+                <th>시간</th>
+                ${DAYS.map(d=>`<th>${d}요일</th>`).join('')}
+              </tr>
+            </thead>
+            <tbody>
+              ${BLOCKS.map((b,i)=>`
+                <tr>
+                  <td><b>${b[0]}</b> <span style="font-size:11px;color:var(--text-3)">${b[1]}</span></td>
+                  ${DAYS.map(d=>{
+                    const k = d+"-"+i;
+                    const v = state.user.schedule[k] || "";
+                    return `<td><button class="slot" data-key="${k}" data-s="${v}">${v==="y"?"가능":(v==="n"?"불가":"")}</button></td>`;
+                  }).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+
+  $$(".slot").forEach(btn=>{
+    btn.onclick = ()=>{
+      const k = btn.dataset.key;
+      let cur = state.user.schedule[k] || "";
+      let next = cur==="" ? "y" : (cur==="y" ? "n" : "");
+      state.user.schedule[k] = next;
+      btn.dataset.s = next;
+      btn.textContent = next==="y" ? "가능" : (next==="n" ? "불가" : "");
+    };
+  });
+}
+
+function presetSchedule(type){
+  if(type==='evenings'){
+    ["월","화","수","목","금"].forEach(d=>{
+      [9,10,11].forEach(i=>{ state.user.schedule[d+"-"+i] = "y"; });
+    });
+  } else if(type==='weekends'){
+    ["토","일"].forEach(d=>{
+      [4,5,6,7,8].forEach(i=>{ state.user.schedule[d+"-"+i] = "y"; });
+    });
+  } else if(type==='clear'){
+    DAYS.forEach(d=>BLOCKS.forEach((_,i)=>{ state.user.schedule[d+"-"+i] = ""; }));
+  }
+  renderSchedule();
+  toast("시간표 프리셋이 적용되었습니다.");
+}
+
+function renderMatching(step){
+  state.matchingStep = step || 1;
+  const score = profileScore();
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="steps">
+        <div class="step ${state.matchingStep===1?'on':(state.matchingStep>1?'done':'')}" onclick="renderMatching(1)">
+          <span class="no">1</span><span>준비 상태 점검</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step ${state.matchingStep===2?'on':(state.matchingStep>2?'done':'')}" onclick="renderMatching(2)">
+          <span class="no">2</span><span>수업 및 역할 확인</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step ${state.matchingStep===3?'on':(state.matchingStep>3?'done':'')}" onclick="renderMatching(3)">
+          <span class="no">3</span><span>선호 조건 서술</span>
+        </div>
+        <div class="step-line"></div>
+        <div class="step ${state.matchingStep===4?'on':''}" onclick="renderMatching(4)">
+          <span class="no">4</span><span>매칭 결과 조회</span>
+        </div>
+      </div>
+
+      ${state.matchingStep===1 ? `
+        <div class="card card-pad">
+          <div class="card-head">
+            <div>
+              <div class="card-title">1단계: 매칭 준비 상태 확인</div>
+              <div class="card-sub">프로필 정보와 시간표가 충분히 입력되어야 알고리즘이 올바른 팀을 배정할 수 있습니다.</div>
+            </div>
+            <span class="tag ${score>=80?'tag-mint':'tag-amber'}">완성도 ${score}%</span>
+          </div>
+
+          <p style="font-size:14.5px; color:var(--text-2); margin-bottom:18px">
+            팀 매칭은 학생의 <b>전공 다양성</b>, <b>선호 역할 균형</b>, <b>공통 가능 시간대</b>, <b>협업 성향 조화</b>를 종합 계산하여 진행됩니다.
+          </p>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:16px; border-radius:var(--r-md); background:var(--surface-2); border:1px solid var(--line); margin-bottom:20px">
+            <div>
+              <b>팀 매칭 참가 준비 완료</b>
+              <div style="font-size:13px; color:var(--text-3)">준비 완료를 켜야 교수자의 편성 풀에 포함됩니다.</div>
+            </div>
+            <div class="switch" id="wizardReadySwitch" data-on="${state.user.matchReady?1:0}"><i></i></div>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn btn-ghost" onclick="go('profile')">프로필 수정하기</button>
+            <button class="btn" onclick="renderMatching(2)">다음: 수업 확인 ➔</button>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.matchingStep===2 ? `
+        <div class="card card-pad">
+          <div class="card-title">2단계: 수강 중인 수업 및 참여 코드</div>
+          <div class="card-sub" style="margin-bottom:18px">팀 매칭에 참여할 과목을 확인하거나 초대 코드를 등록하세요.</div>
+
+          <div class="class-card active" style="margin-bottom:14px">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start">
+              <div>
+                <h4 style="font-size:16px">DS창업캡스톤디자인1</h4>
+                <div style="font-size:13px; color:var(--text-3); margin-top:2px">MAT2082 · 2026학년도 2학기 · 한지원 교수</div>
+              </div>
+              <span class="tag tag-indigo">참여 등록됨</span>
+            </div>
+            <div class="metric" style="margin-top:14px">
+              <span>내 1순위 희망 역할: <b>${state.user.roles[0] || '미정'}</b></span>
+              <span>2순위: <b>${state.user.roles[1] || '없음'}</b></span>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:20px">
+            <label>수업 참여 코드 직접 등록</label>
+            <div style="display:flex; gap:8px">
+              <input class="input" placeholder="6자리 참여 코드 (예: A7X9K2)" style="text-transform:uppercase">
+              <button class="btn btn-ghost" onclick="toast('수업 코드가 등록되었습니다.')">확인</button>
+            </div>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn btn-ghost" onclick="renderMatching(1)">이전 단계</button>
+            <button class="btn" onclick="renderMatching(3)">다음: 선호 조건 ➔</button>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.matchingStep===3 ? `
+        <div class="card card-pad">
+          <div class="card-title">3단계: 선호하는 팀 분위기 및 요구사항</div>
+          <div class="card-sub" style="margin-bottom:18px">자유 서술란에 함께하고 싶은 학우 또는 특별한 사유를 적어주시면 AI가 반영합니다.</div>
+
+          <div class="field">
+            <label>희망하는 협업 분위기</label>
+            <select class="select">
+              <option>적극적인 소통과 정기 모임 중심의 열정적인 분위기</option>
+              <option>각자 파트를 독립적으로 책임감 있게 끝내는 분위기</option>
+              <option>다양한 시도를 해보며 함께 배우는 융합 프로젝트 분위기</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label>자유 서술 요구사항 (사전 페어 / 기피 / 기타 사유)</label>
+            <textarea class="textarea" placeholder="예: '이민준 학우와 지난 학기 스터디를 함께하여 이번 캡스톤에서도 같은 팀으로 작업하기를 희망합니다.' 또는 '화요일 17시 이후에는 아르바이트가 있어 저녁 회의가 어렵습니다.'"></textarea>
+          </div>
+
+          <div class="wizard-nav">
+            <button class="btn btn-ghost" onclick="renderMatching(2)">이전 단계</button>
+            <button class="btn" onclick="submitMatching()">매칭 신청 완료 ➔</button>
+          </div>
+        </div>
+      ` : ''}
+
+      ${state.matchingStep===4 ? `
+        <div class="card card-pad" style="margin-bottom:20px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">4단계: AI 팀 매칭 결과</div>
+              <div class="card-sub">DS창업캡스톤디자인1 최종 배정 결과입니다.</div>
+            </div>
+            <span class="tag tag-mint">편성 완료</span>
+          </div>
+
+          <div class="team-grid">
+            <div class="team-card mine">
+              <div class="tc-top">
+                <h4>Team 1 (캠퍼스 중고거래 리뉴얼)</h4>
+                <div class="score"><span class="s">94</span><span class="t">/ 100</span></div>
+              </div>
+              <div class="score-bar"><i style="width:94%"></i></div>
+
+              <div class="member">
+                <span class="avatar" style="background:var(--indigo)">김</span>
+                <div>
+                  <div class="m-nm">김도윤 (나) <span class="tag tag-mint" style="font-size:10.5px">팀장</span></div>
+                  <div class="m-mt">데이터사이언스학과 · 3학년</div>
+                </div>
+                <span class="tag tag-grey m-role">프론트엔드</span>
+              </div>
+              <div class="member">
+                <span class="avatar">이</span>
+                <div>
+                  <div class="m-nm">이민준</div>
+                  <div class="m-mt">전기전자공학 · 3학년</div>
+                </div>
+                <span class="tag tag-grey m-role">백엔드</span>
+              </div>
+              <div class="member">
+                <span class="avatar">박</span>
+                <div>
+                  <div class="m-nm">박지수</div>
+                  <div class="m-mt">SW융합학과 · 2학년</div>
+                </div>
+                <span class="tag tag-grey m-role">기획</span>
+              </div>
+              <div class="member">
+                <span class="avatar">최</span>
+                <div>
+                  <div class="m-nm">최준서</div>
+                  <div class="m-mt">AI소프트웨어 · 2학년</div>
+                </div>
+                <span class="tag tag-grey m-role">데이터</span>
+              </div>
+
+              <div class="tc-foot">
+                <span class="tc-fact">⏰ 공통 가능: 화 15~18시, 목 15~17시</span>
+                <span class="tc-fact">🎓 3개 전공 융합</span>
+                <span class="tc-fact">⚡ 기획/풀스택/데이터 충족</span>
+              </div>
+
+              <div style="margin-top:16px">
+                <button class="btn btn-sm btn-ghost" style="width:100%" onclick="go('project_detail', 'p1')">
+                  첫 모임 아젠다 및 협업 착수 ➔
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ` : ''}
+    </div>
+  `;
+
+  const sw = $("#wizardReadySwitch");
+  if(sw){
+    sw.onclick = function(){
+      state.user.matchReady = !state.user.matchReady;
+      this.dataset.on = state.user.matchReady ? "1" : "0";
+      toast(state.user.matchReady ? "매칭 준비 완료되었습니다." : "준비 상태가 해제되었습니다.");
+    };
+  }
+}
+
+function submitMatching(){
+  toast("매칭 신청서가 교수자에게 정상 제출되었습니다!");
+  renderMatching(4);
+}
+
+function renderProjects(){
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="card card-pad">
+        <div class="card-head">
+          <div>
+            <div class="card-title">진행 중인 캡스톤 프로젝트</div>
+            <div class="card-sub">AI 팀 매칭을 통해 구성된 팀들의 프로젝트 공간입니다.</div>
+          </div>
+        </div>
+
+        <div style="display:grid; gap:16px">
+          ${state.projects.map(p=>`
+            <div class="proj-item" style="padding:20px" onclick="go('project_detail', '${p.id}')">
+              <div class="pi-ico" style="width:52px;height:52px;font-size:18px">${p.name.charAt(0)}</div>
+              <div style="flex:1">
+                <div style="display:flex; justify-content:space-between; align-items:center">
+                  <h4>${esc(p.name)}</h4>
+                  <span class="tag tag-mint">${p.status} (${p.progress}%)</span>
+                </div>
+                <div class="meta" style="margin-bottom:8px">${esc(p.course)} · 팀원 ${p.members}명 (${p.team.map(m=>m.n).join(', ')})</div>
+                <div class="bar"><i style="width:${p.progress}%"></i></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProjectDetail(id){
+  const p = state.projects.find(x=>x.id===id) || state.projects[0];
+  const agendaTitles = [
+    "팀장 및 회의록 작성자 선정",
+    "정기 주간 회의 시간 확정 (화요일 16:00 추천)",
+    "프로젝트 주제 아이디어 3개 도출 및 역할 분담",
+    "협업 도구 (GitHub / Notion / Figma) 개설 및 초대"
+  ];
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="back-link" onclick="go('projects')">
+        ← 프로젝트 목록으로 돌아가기
+      </div>
+
+      <div class="hello" style="margin-bottom:18px">
+        <h2>${esc(p.name)}</h2>
+        <p>${esc(p.course)} · 팀원 ${p.members}명 · 진척도 ${p.progress}%</p>
+        <div class="bar" style="margin-top:14px; max-width:400px"><i style="width:${p.progress}%"></i></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card card-pad">
+          <div class="card-title" style="margin-bottom:14px">첫 모임 킥오프 아젠다</div>
+          <div class="card-sub" style="margin-bottom:14px">AI가 팀원들의 일정과 역할을 분석하여 자동 생성한 추천 아젠다입니다.</div>
+
+          <ul class="agenda">
+            ${agendaTitles.map((t,idx)=>`
+              <li class="${p.agenda[idx]?'done':''}">
+                <input type="checkbox" id="ag_${idx}" ${p.agenda[idx]?'checked':''} onchange="toggleAgenda('${p.id}', ${idx})">
+                <label for="ag_${idx}">${t}</label>
+              </li>
+            `).join('')}
+          </ul>
+        </div>
+
+        <div class="card card-pad">
+          <div class="card-title" style="margin-bottom:14px">팀원 및 역할 배정</div>
+          <div>
+            ${p.team.map(m=>`
+              <div class="role-row">
+                <span class="r-nm">${esc(m.r)}</span>
+                <span class="r-who"><b>${esc(m.n)}</b> (${esc(m.m)})</span>
+              </div>
+            `).join('')}
+          </div>
+
+          <div style="margin-top:20px; padding:14px; border-radius:var(--r-md); background:var(--surface-2); border:1px solid var(--line)">
+            <b style="font-size:13.5px; color:var(--navy)">⏰ 추천 정기 회의 시간</b>
+            <p style="font-size:13px; color:var(--text-2); margin-top:4px">
+              화요일 16:00 ~ 18:00 (전원 가능 시간)<br>보조 시간대: 목요일 15:00 ~ 17:00
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function toggleAgenda(projectId, idx){
+  const p = state.projects.find(x=>x.id===projectId);
+  if(p){
+    p.agenda[idx] = !p.agenda[idx];
+    const doneCount = p.agenda.filter(Boolean).length;
+    p.progress = Math.round((doneCount / p.agenda.length) * 100);
+    renderProjectDetail(projectId);
+    toast(`아젠다가 업데이트되었습니다. (진척도: ${p.progress}%)`);
+  }
+}
+
+/* =================================================================
+   2. 교수 화면 구현
+================================================================= */
+function renderProfClasses(){
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="card card-pad" style="margin-bottom:20px">
+        <div class="card-head">
+          <div>
+            <div class="card-title">개설된 수업 목록</div>
+            <div class="card-sub">현재 학기 개설 과목의 설문 현황과 참여 코드를 확인하세요.</div>
+          </div>
+          <button class="btn btn-sm" onclick="openNewClassModal()">+ 새 수업 개설</button>
+        </div>
+
+        <div style="display:grid; gap:16px">
+          ${state.prof.classes.map(c=>`
+            <div class="class-card ${state.prof.current===c.id?'active':''}" onclick="selectProfClass('${c.id}')">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:10px">
+                <div>
+                  <h4 style="font-size:17px">${esc(c.name)} <span style="font-size:13px; color:var(--text-3); font-weight:400">(${c.code})</span></h4>
+                  <div style="font-size:13px; color:var(--text-2); margin-top:4px">${c.term} · ${c.kind}</div>
+                </div>
+                <div style="display:flex; gap:8px; align-items:center">
+                  <span class="tag ${c.status==='편성 완료'?'tag-mint':(c.status==='편성 대기'?'tag-amber':'tag-grey')}">${c.status}</span>
+                  ${state.prof.current===c.id ? `<span class="tag tag-indigo">선택됨</span>`:''}
+                </div>
+              </div>
+
+              <div class="metric" style="margin-top:16px">
+                <span>학생 설문 응답 현황</span>
+                <b>${c.submitted}명 제출 / ${c.cap}명 정원 (${Math.round(c.submitted/c.cap*100)}%)</b>
+              </div>
+              <div class="bar"><i style="width:${Math.round(c.submitted/c.cap*100)}%"></i></div>
+
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; flex-wrap:wrap; gap:8px">
+                <div class="code-box">
+                  <span style="font-size:12px; color:var(--text-3)">학생 참여 코드:</span>
+                  <span class="cd">${c.join}</span>
+                  <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); copyCode('${c.join}')">복사</button>
+                </div>
+                <div style="display:flex; gap:8px">
+                  <button class="btn btn-sm btn-ghost" onclick="event.stopPropagation(); state.prof.current='${c.id}'; go('prof_roster');">수강생 명단</button>
+                  <button class="btn btn-sm" onclick="event.stopPropagation(); state.prof.current='${c.id}'; go('prof_setup');">팀 편성 설정</button>
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectProfClass(id){
+  state.prof.current = id;
+  renderProfClasses();
+  toast("수업이 선택되었습니다.");
+}
+
+function copyCode(c){
+  navigator.clipboard.writeText(c).then(()=>{
+    toast(`참여 코드 [${c}]가 클립보드에 복사되었습니다.`);
+  }).catch(()=>{
+    toast(`참여 코드: ${c}`);
+  });
+}
+
+function openNewClassModal(){
+  const name = prompt("새 과목명을 입력하세요 (예: 웹시스템설계):");
+  if(!name) return;
+  const code = prompt("과목 코드를 입력하세요 (예: CSE3014):") || "CSE0000";
+  const id = "c" + (state.prof.classes.length + 1);
+  const joinCode = Math.random().toString(36).substring(2,8).toUpperCase();
+  state.prof.classes.push({
+    id, name, code, term:"2026학년도 2학기", cap:40, join:joinCode,
+    deadline:"2026-10-01 23:59", submitted:1, kind:"개발 프로젝트", status:"설문 진행 중", teams:0
+  });
+  state.prof.current = id;
+  renderProfClasses();
+  toast(`새 수업 [${name}]이 개설되었습니다. (코드: ${joinCode})`);
+}
+
+function renderProfRoster(){
+  const cur = state.prof.classes.find(c=>c.id===state.prof.current) || state.prof.classes[0];
+  const total = ROSTER.length;
+  const done = ROSTER.filter(r=>r.done).length;
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="card card-pad" style="margin-bottom:20px">
+        <div class="card-head">
+          <div>
+            <div class="card-title">${esc(cur.name)} 수강생 설문 현황</div>
+            <div class="card-sub">총 ${total}명 중 ${done}명 제출 완료 (${Math.round(done/total*100)}%)</div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-sm btn-ghost" onclick="toast('수강생 명단 CSV가 다운로드되었습니다.')">명단 다운로드</button>
+            <button class="btn btn-sm" onclick="toast('미제출자들에게 알림이 발송되었습니다.')">미제출자 리마인드</button>
+          </div>
+        </div>
+
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>학번</th>
+                <th>이름</th>
+                <th>학과</th>
+                <th>학년</th>
+                <th>희망 역할</th>
+                <th>제출 상태</th>
+                <th>제출 일시</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${ROSTER.map(r=>`
+                <tr>
+                  <td class="num">${r.id}</td>
+                  <td><b>${esc(r.n)}</b></td>
+                  <td>${esc(r.m)}</td>
+                  <td>${r.y}학년</td>
+                  <td><span class="tag tag-grey">${r.role}</span></td>
+                  <td><span class="tag ${r.done?'tag-mint':'tag-amber'}">${r.state}</span></td>
+                  <td class="num">${r.at}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderProfSetup(){
+  const s = state.prof.setup;
+  const p = state.prof.presets;
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="card card-pad" style="margin-bottom:20px">
+        <div class="card-head">
+          <div>
+            <div class="card-title">팀 편성 프리셋 선택</div>
+            <div class="card-sub">수업의 목적과 성격에 적합한 프리셋을 선택하면 가중치와 제약조건이 자동 설정됩니다.</div>
+          </div>
+        </div>
+
+        <div class="preset-row">
+          ${p.map(pr=>`
+            <div class="preset ${state.prof.activePreset===pr.id?'on':''}" onclick="applyPreset('${pr.id}')">
+              <div class="p-head">
+                <b>${esc(pr.name)}</b>
+                ${state.prof.activePreset===pr.id?'<span class="tag tag-mint" style="font-size:10px">적용중</span>':''}
+              </div>
+              <div class="p-desc">${esc(pr.desc)}</div>
+              <div class="p-w">
+                <div class="p-wi"><i>전공</i><div class="p-dots">${[1,2,3,4,5].map(d=>`<span class="${d<=pr.weights.major?'on':''}"></span>`).join('')}</div><b>${pr.weights.major}</b></div>
+                <div class="p-wi"><i>역할</i><div class="p-dots">${[1,2,3,4,5].map(d=>`<span class="${d<=pr.weights.role?'on':''}"></span>`).join('')}</div><b>${pr.weights.role}</b></div>
+                <div class="p-wi"><i>일정</i><div class="p-dots">${[1,2,3,4,5].map(d=>`<span class="${d<=pr.weights.time?'on':''}"></span>`).join('')}</div><b>${pr.weights.time}</b></div>
+                <div class="p-wi"><i>성향</i><div class="p-dots">${[1,2,3,4,5].map(d=>`<span class="${d<=pr.weights.trait?'on':''}"></span>`).join('')}</div><b>${pr.weights.trait}</b></div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card card-pad">
+          <div class="card-title" style="margin-bottom:16px">가중치 및 기본 설정</div>
+
+          <div class="field">
+            <div class="metric">
+              <label style="margin:0">팀당 목표 인원 수</label>
+              <b><span id="teamSizeVal">${s.size}</span>명</b>
+            </div>
+            <input type="range" min="3" max="6" value="${s.size}" id="teamSizeRange" oninput="$('#teamSizeVal').textContent=this.value; state.prof.setup.size=parseInt(this.value)">
+          </div>
+
+          <div style="height:12px"></div>
+          <label style="font-size:13.5px; font-weight:600; color:var(--navy-soft)">항목별 알고리즘 가중치 (1~5)</label>
+
+          <div class="weight-row">
+            <span class="wr-name">전공 다양성 (학과 분산)</span>
+            <div class="dot-picker" id="w_major">
+              ${[1,2,3,4,5].map(v=>`<span class="dot ${v<=s.weights.major?'filled':''}" onclick="setWeight('major',${v})">${v}</span>`).join('')}
+            </div>
+            <span class="wr-val">${s.weights.major}점</span>
+          </div>
+
+          <div class="weight-row">
+            <span class="wr-name">역할 균형 (기획·개발·디자인)</span>
+            <div class="dot-picker" id="w_role">
+              ${[1,2,3,4,5].map(v=>`<span class="dot ${v<=s.weights.role?'filled':''}" onclick="setWeight('role',${v})">${v}</span>`).join('')}
+            </div>
+            <span class="wr-val">${s.weights.role}점</span>
+          </div>
+
+          <div class="weight-row">
+            <span class="wr-name">일정 일치도 (공통 회의 시간)</span>
+            <div class="dot-picker" id="w_time">
+              ${[1,2,3,4,5].map(v=>`<span class="dot ${v<=s.weights.time?'filled':''}" onclick="setWeight('time',${v})">${v}</span>`).join('')}
+            </div>
+            <span class="wr-val">${s.weights.time}점</span>
+          </div>
+
+          <div class="weight-row">
+            <span class="wr-name">협업 성향 조화 (페이스·소통)</span>
+            <div class="dot-picker" id="w_trait">
+              ${[1,2,3,4,5].map(v=>`<span class="dot ${v<=s.weights.trait?'filled':''}" onclick="setWeight('trait',${v})">${v}</span>`).join('')}
+            </div>
+            <span class="wr-val">${s.weights.trait}점</span>
+          </div>
+        </div>
+
+        <div class="card card-pad">
+          <div class="card-title" style="margin-bottom:16px">하드 제약 조건 & 자연어 요구사항</div>
+
+          <label class="check">
+            <input type="checkbox" ${s.hard.sameMajor?'checked':''} onchange="state.prof.setup.hard.sameMajor=this.checked">
+            <span>동일 학과 학생 한 팀 집중 방지 (최대 2명 이내)</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" ${s.hard.splitPair?'checked':''} onchange="state.prof.setup.hard.splitPair=this.checked">
+            <span>기피 인원 분리 보장 (학생 요청 반영)</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" ${s.hard.evenTransfer?'checked':''} onchange="state.prof.setup.hard.evenTransfer=this.checked">
+            <span>편입생 / 복수전공생 고른 분배</span>
+          </label>
+
+          <div class="field" style="margin-top:20px">
+            <label>교수자 특별 요구사항 (자연어 서술)</label>
+            <textarea class="textarea" id="profNote" style="min-height:80px">${esc(s.note)}</textarea>
+          </div>
+
+          <div style="background:var(--surface-2); padding:12px; border-radius:var(--r-md); border:1px solid var(--line)">
+            <b style="font-size:12.5px; color:var(--navy-soft)">AI 실시간 파싱 및 해석 결과</b>
+            <div class="parse-row">
+              <input type="checkbox" checked disabled>
+              <span class="p-txt">발표 역량 보유자 각 팀 최소 1명 배정</span>
+            </div>
+            <div class="parse-row">
+              <input type="checkbox" checked disabled>
+              <span class="p-txt">개발(프론트/백엔드) 경험자 팀당 최소 1명 포함</span>
+            </div>
+            <div class="parse-row">
+              <input type="checkbox" checked disabled>
+              <span class="p-txt">4학년 학생 특정 팀 쏠림 방지</span>
+            </div>
+          </div>
+
+          <div style="margin-top:20px">
+            <button class="btn btn-lg" onclick="runAiMatching()">⚡ AI 팀 매칭 실행하기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function applyPreset(id){
+  state.prof.activePreset = id;
+  const p = state.prof.presets.find(x=>x.id===id);
+  if(p){
+    state.prof.setup.weights = Object.assign({}, p.weights);
+    state.prof.setup.size = p.size;
+    state.prof.setup.hard = Object.assign({}, p.hard);
+    renderProfSetup();
+    toast(`[${p.name}] 프리셋이 적용되었습니다.`);
+  }
+}
+
+function setWeight(key, val){
+  state.prof.setup.weights[key] = val;
+  renderProfSetup();
+}
+
+function runAiMatching(){
+  go("prof_results", true);
+}
+
+function renderProfResults(isNewRun){
+  if(isNewRun){
+    $("#content").innerHTML = `
+      <div class="page">
+        <div class="card loading-wrap">
+          <div class="pulse">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/>
+            </svg>
+          </div>
+          <h3 style="font-size:20px; color:var(--navy)">AI 팀 매칭 알고리즘 최적화 연산 중...</h3>
+          <p style="color:var(--text-3); font-size:14px; margin-top:8px">수강생 38명의 역량, 성향, 주간 시간표와 하드 제약 조건을 분석하고 있습니다.</p>
+          <ul class="load-steps" id="loadSteps">
+            <li class="on">✓ 수강생 38명 설문 데이터 및 주간 시간표 수집 완료</li>
+            <li class="on">✓ 전공 다양성 및 역할 조합 매트릭스 계산 중...</li>
+            <li>· 팀별 공통 모임 가능 시간대 최대화 수렴 중...</li>
+            <li>· 자연어 특별 제약 조건 (발표자/개발자 최소 1명) 유효성 검증</li>
+          </ul>
+        </div>
+      </div>
+    `;
+
+    setTimeout(()=>{
+      $$("#loadSteps li")[2].classList.add("on");
+    }, 450);
+    setTimeout(()=>{
+      $$("#loadSteps li")[3].classList.add("on");
+    }, 850);
+    setTimeout(()=>{
+      buildTeamsResult();
+      renderProfResults(false);
+      toast("AI 팀 편성이 성공적으로 완료되었습니다!");
+    }, 1250);
+    return;
+  }
+
+  if(!state.prof.result){
+    buildTeamsResult();
+  }
+
+  const teams = state.prof.result;
+
+  $("#content").innerHTML = `
+    <div class="page">
+      <div class="result-summary">
+        <div class="stat">
+          <div class="n">${teams.length}개 팀</div>
+          <div class="l">편성된 총 팀 수</div>
+        </div>
+        <div class="stat">
+          <div class="n">93.8점</div>
+          <div class="l">평균 궁합 적합도</div>
+        </div>
+        <div class="stat">
+          <div class="n">5.4시간</div>
+          <div class="l">팀별 평균 공통 시간</div>
+        </div>
+        <div class="stat">
+          <div class="n">97.2%</div>
+          <div class="l">희망 역할 일치율</div>
+        </div>
+      </div>
+
+      <div class="card card-pad" style="margin-bottom:20px">
+        <div class="card-head">
+          <div>
+            <div class="card-title">편성된 팀 목록 (총 ${teams.length}팀, 38명)</div>
+            <div class="card-sub">원하는 팀원을 클릭하여 다른 팀으로 수동 조정할 수 있습니다.</div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button class="btn btn-sm btn-ghost" onclick="go('prof_setup')">가중치 재설정</button>
+            <button class="btn btn-sm btn-ghost" onclick="exportCsv()">CSV 다운로드</button>
+            <button class="btn btn-sm" onclick="confirmTeams()">편성 확정 및 배포</button>
+          </div>
+        </div>
+
+        <div class="team-grid">
+          ${teams.map((t,tIdx)=>`
+            <div class="team-card">
+              <div class="tc-top">
+                <h4>${t.name}</h4>
+                <div class="score ${t.score>=90?'':'mid'}">
+                  <span class="s">${t.score}</span><span class="t">점</span>
+                </div>
+              </div>
+              <div class="score-bar ${t.score>=90?'':'mid'}"><i style="width:${t.score}%"></i></div>
+
+              <div>
+                ${t.members.map((m,mIdx)=>`
+                  <div class="member">
+                    <span class="avatar">${initial(m.n)}</span>
+                    <div>
+                      <div class="m-nm">${esc(m.n)} <span style="font-size:11.5px;color:var(--text-3)">${m.y}학년</span></div>
+                      <div class="m-mt">${esc(m.m)}</div>
+                    </div>
+                    <span class="tag tag-grey m-role">${esc(m.r)}</span>
+                  </div>
+                `).join('')}
+              </div>
+
+              <div class="tc-foot">
+                ${t.facts.map(f=>`<span class="tc-fact">${esc(f)}</span>`).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function buildTeamsResult(){
+  const pool = [
+    {n:"김도윤",m:"데이터사이언스학과",y:3,r:"프론트엔드"},
+    {n:"이민준",m:"전기전자공학",y:3,r:"백엔드"},
+    {n:"박지수",m:"SW융합학과",y:2,r:"기획"},
+    {n:"최준서",m:"AI소프트웨어",y:2,r:"데이터"},
+    {n:"정서연",m:"경영학",y:3,r:"기획"},
+    {n:"한소희",m:"시각디자인",y:2,r:"디자인"},
+    {n:"오지훈",m:"컴퓨터공학",y:4,r:"프론트엔드"},
+    {n:"윤채원",m:"수리데이터사이언스",y:2,r:"백엔드"},
+    {n:"송지원",m:"경영학",y:2,r:"발표"},
+    {n:"백준혁",m:"전기전자공학",y:4,r:"프론트엔드"},
+    {n:"강다은",m:"SW융합학과",y:3,r:"백엔드"},
+    {n:"임도현",m:"AI소프트웨어",y:3,r:"데이터"},
+    {n:"서민재",m:"미디어커뮤니케이션",y:2,r:"발표"},
+    {n:"노하린",m:"산업경영공학",y:3,r:"기획"},
+    {n:"장우진",m:"컴퓨터공학",y:2,r:"데이터"},
+    {n:"문가영",m:"시각디자인",y:3,r:"디자인"},
+    {n:"김서준",m:"전기전자공학",y:3,r:"백엔드"},
+    {n:"이하윤",m:"컴퓨터공학",y:2,r:"프론트엔드"},
+    {n:"박시우",m:"SW융합학과",y:4,r:"기획"},
+    {n:"최예린",m:"AI소프트웨어",y:3,r:"데이터"},
+    {n:"정우성",m:"경영학",y:2,r:"발표"},
+    {n:"한지민",m:"시각디자인",y:2,r:"디자인"},
+    {n:"윤서진",m:"수리데이터사이언스",y:3,r:"데이터"},
+    {n:"조민석",m:"컴퓨터공학",y:3,r:"백엔드"},
+    {n:"신아름",m:"미디어커뮤니케이션",y:3,r:"기획"},
+    {n:"배준호",m:"전기전자공학",y:4,r:"프론트엔드"},
+    {n:"홍가온",m:"SW융합학과",y:2,r:"디자인"},
+    {n:"권나연",m:"산업경영공학",y:2,r:"발표"},
+    {n:"황태현",m:"컴퓨터공학",y:3,r:"백엔드"},
+    {n:"안유진",m:"경영학",y:3,r:"기획"},
+    {n:"류현서",m:"AI소프트웨어",y:2,r:"데이터"},
+    {n:"남도윤",m:"시각디자인",y:3,r:"디자인"},
+    {n:"심채은",m:"SW융합학과",y:3,r:"프론트엔드"},
+    {n:"고은비",m:"미디어커뮤니케이션",y:2,r:"발표"},
+    {n:"표지훈",m:"전기전자공학",y:3,r:"백엔드"},
+    {n:"하연우",m:"수리데이터사이언스",y:2,r:"데이터"},
+    {n:"진하람",m:"컴퓨터공학",y:4,r:"프론트엔드"},
+    {n:"차은우",m:"산업경영공학",y:3,r:"기획"}
+  ];
+
+  const size = state.prof.setup.size || 4;
+  const numTeams = Math.ceil(pool.length / size);
+  const teams = [];
+
+  const commonTimes = [
+    "⏰ 화 15~18시 (주 3시간)",
+    "⏰ 목 16~19시 (주 3시간)",
+    "⏰ 수 14~17시 (주 3시간)",
+    "⏰ 월 17~20시 (주 3시간)",
+    "⏰ 금 13~16시 (주 3시간)",
+    "⏰ 화 18~21시 (주 3시간)",
+    "⏰ 토 14~18시 (주 4시간)"
+  ];
+
+  for(let i=0; i<numTeams; i++){
+    const members = pool.slice(i*size, (i+1)*size);
+    const score = 91 + ((i * 3) % 8);
+    const majors = [...new Set(members.map(m=>m.m))];
+    teams.push({
+      id: "t" + (i+1),
+      name: `Team ${i+1}`,
+      score,
+      members,
+      facts: [
+        commonTimes[i % commonTimes.length],
+        `🎓 ${majors.length}개 전공 융합`,
+        `⚡ ${members.map(m=>m.r).slice(0,3).join('/')} 충족`
+      ]
+    });
+  }
+  state.prof.result = teams;
+}
+
+function exportCsv(){
+  if(!state.prof.result) return;
+  let csv = "\uFEFF팀번호,팀이름,이름,전공,학년,역할\n";
+  state.prof.result.forEach((t,tIdx)=>{
+    t.members.forEach(m=>{
+      csv += `${tIdx+1},${t.name},${m.n},${m.m},${m.y}학년,${m.r}\n`;
+    });
+  });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `TeamMatch_편성결과_${state.prof.classes[0].code}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  toast("CSV 파일이 다운로드되었습니다.");
+}
+
+function confirmTeams(){
+  const c = state.prof.classes.find(x=>x.id===state.prof.current) || state.prof.classes[0];
+  c.status = "편성 완료";
+  c.teams = state.prof.result ? state.prof.result.length : 9;
+  toast("팀 편성이 확정되어 전체 수강생에게 공개되었습니다!");
+  go("prof_classes");
+}
+
+/* =================================================================
+   초기화
+================================================================= */
+setRole("student");
+</script>
+</body>
+</html>
