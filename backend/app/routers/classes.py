@@ -6,7 +6,7 @@ import secrets
 import string
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -158,7 +158,7 @@ def update_class(
     return _to_out(db, c)
 
 
-@router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 def delete_class(
     class_id: uuid.UUID,
     prof: User = Depends(require_professor),
@@ -172,7 +172,7 @@ def delete_class(
     c = _owned_class(db, class_id, prof)
     db.delete(c)
     db.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================

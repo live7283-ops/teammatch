@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -97,8 +97,8 @@ def update_me(
     return user
 
 
-@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
-def delete_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> None:
+@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
+def delete_me(user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> Response:
     """회원 탈퇴 (soft delete).
 
     행을 지우지 않고 is_active=False 로 비활성화만 한다. 덕분에
@@ -109,4 +109,4 @@ def delete_me(user: User = Depends(get_current_user), db: Session = Depends(get_
         user.is_active = False
         user.deactivated_at = dt.datetime.now(dt.timezone.utc)
         db.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

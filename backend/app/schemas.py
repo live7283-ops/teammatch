@@ -5,7 +5,7 @@ import datetime as dt
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 # ---- Auth ------------------------------------------------------
@@ -298,3 +298,39 @@ class MatchV2Result(BaseModel):
     teams: list[V2TeamOut]
     trace: TraceOut                  # 조화도 추이(그래프용)
     parsed_rules: list[ParsedRuleOut]  # 주관식 해석 결과
+
+# 혹시 이거 이미 하셨나요?
+'''
+# 과목 수정 스키마
+class ClassUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    code: Optional[str] = None
+
+# 사용자 수정 스키마
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    role: Optional[str] = None
+'''
+# 매칭 결과 조회 및 팀 수정 스키마
+class MatchRunSummary(BaseModel):
+    id: uuid.UUID
+    class_id: uuid.UUID
+    team_size: int
+    avg_score: float | None
+    note: str | None
+    created_at: dt.datetime
+    team_count: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TeamMemberUpdate(BaseModel):
+    student_id: uuid.UUID
+    assigned_role: str | None = None
+
+
+class TeamUpdate(BaseModel):
+    name: str | None = None
+    members: list[TeamMemberUpdate] | None = None
