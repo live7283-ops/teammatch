@@ -25,10 +25,13 @@ from ..schemas import (
     MatchResultOut,
     MemberOut,
     PresetOut,
+    RunSummary,
+    TeamDetail,
+    TeamMemberDetail,
     TeamOut,
     Weights,
 )
-from ..security import require_professor
+from ..security import get_owned_class, require_professor
 
 router = APIRouter(prefix="/api", tags=["matching"])
 
@@ -93,9 +96,21 @@ def run_match(
     prof: User = Depends(require_professor),
     db: Session = Depends(get_db),
 ) -> MatchResultOut:
-    c = db.get(Class, class_id)
-    if not c or c.professor_id != prof.id:
-        raise HTTPException(status_code=404, detail="수업을 찾을 수 없습니다.")
+    # 과목별 접근 제어: 공용 소유 확인 함수 사용(없는 수업/남의 수업 모두 404)
+    c = get_owned_class(db, class_id, prof)
+
+    # 계층 방어 0: 이미 편성이 끝난 수업은 재실행을 막는다(중복 run/team 방지).
+    # 단, force=true 면 이전 편성 결과를 지우고 재편성을 허용한다.
+    if c.status == "편성 완료":
+        if not body.force:
+            raise HTTPException(
+                status_code=409,
+                detail="이미 팀 편성이 완료된 수업입니다. 다시 편성하려면 force=true 로 요청하세요.",
+            )
+        # 재편성: 이 수업의 기존 매칭 run 들을 삭제(연관 team/member는 CASCADE).
+        for old in db.scalars(select(MatchRun).where(MatchRun.class_id == class_id)).all():
+            db.delete(old)
+        db.flush()
 
     candidates, users = _load_candidates(db, class_id)
 
@@ -128,8 +143,7 @@ def run_match(
     # 계층 방어 4: 중복 배정 안전망
     _assert_no_duplicate_assignment(outcome.teams)
 
-    # Persist run + teams (replace any prior run for this class is left to caller;
-    # here we simply append a new immutable run).
+    # 결과 저장: 새 run 을 추가한다(불변 이력).
     run = MatchRun(
         class_id=class_id,
         team_size=body.team_size,
@@ -211,3 +225,171 @@ def list_presets(prof: User = Depends(require_professor), db: Session = Depends(
         )
         for p in rows
     ]
+
+
+# ================================================================
+# 백엔드1 5번: 저장된 매칭 결과 조회
+# ================================================================
+def _run_to_result(db: Session, run: MatchRun) -> MatchResultOut:
+    """저장된 MatchRun 을 MatchResultOut(팀/팀원 포함)으로 조립."""
+    teams_out: list[TeamOut] = []
+    for team in sorted(run.teams, key=lambda t: t.name):
+        members_out: list[MemberOut] = []
+        for tm in team.members:
+            u = db.get(User, tm.student_id)
+            members_out.append(
+                MemberOut(
+                    student_id=tm.student_id,
+                    name=u.name if u else "(탈퇴/삭제된 학생)",
+                    major=u.major if u else None,
+                    year=u.year if u else None,
+                    assigned_role=tm.assigned_role,
+                )
+            )
+        teams_out.append(
+            TeamOut(
+                id=team.id,
+                name=team.name,
+                fit_score=float(team.fit_score),
+                members=members_out,
+            )
+        )
+    return MatchResultOut(
+        run_id=run.id,
+        class_id=run.class_id,
+        team_size=run.team_size,
+        avg_score=float(run.avg_score) if run.avg_score is not None else 0.0,
+        teams=teams_out,
+    )
+
+
+@router.get("/classes/{class_id}/result", response_model=MatchResultOut)
+def get_latest_result(
+    class_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> MatchResultOut:
+    """해당 수업의 가장 최근 매칭 결과를 조회."""
+    get_owned_class(db, class_id, prof)
+    run = db.scalar(
+        select(MatchRun)
+        .where(MatchRun.class_id == class_id)
+        .order_by(MatchRun.created_at.desc())
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="아직 편성된 매칭 결과가 없습니다.")
+    return _run_to_result(db, run)
+
+
+@router.get("/classes/{class_id}/runs", response_model=list[RunSummary])
+def list_runs(
+    class_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> list[RunSummary]:
+    """해당 수업의 매칭 실행 이력 목록(요약)."""
+    get_owned_class(db, class_id, prof)
+    runs = db.scalars(
+        select(MatchRun)
+        .where(MatchRun.class_id == class_id)
+        .order_by(MatchRun.created_at.desc())
+    ).all()
+    return [
+        RunSummary(
+            run_id=r.id,
+            class_id=r.class_id,
+            team_size=r.team_size,
+            team_count=len(r.teams),
+            avg_score=float(r.avg_score) if r.avg_score is not None else None,
+            note=r.note,
+            created_at=r.created_at,
+        )
+        for r in runs
+    ]
+
+
+@router.get("/runs/{run_id}", response_model=MatchResultOut)
+def get_run(
+    run_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> MatchResultOut:
+    """특정 매칭 실행 이력 상세 조회."""
+    run = db.get(MatchRun, run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="매칭 이력을 찾을 수 없습니다.")
+    # 소유 확인: 그 run 이 속한 수업의 담당 교수인지
+    get_owned_class(db, run.class_id, prof)
+    return _run_to_result(db, run)
+
+
+# ================================================================
+# 백엔드1 6번: 팀 단위 상세 조회 (팀원 + 일정)
+# ================================================================
+def _student_avail(db: Session, class_id: uuid.UUID, student_id: uuid.UUID) -> list[str]:
+    """해당 수업에서 학생이 가능('y')하다고 한 시간 슬롯("day-block") 목록."""
+    e = db.scalar(
+        select(Enrollment).where(
+            Enrollment.class_id == class_id, Enrollment.student_id == student_id
+        )
+    )
+    if not e or not e.survey:
+        return []
+    return [f"{a.day}-{a.block}" for a in e.survey.availability if a.state == "y"]
+
+
+def _student_roles(db: Session, class_id: uuid.UUID, student_id: uuid.UUID) -> list[str]:
+    e = db.scalar(
+        select(Enrollment).where(
+            Enrollment.class_id == class_id, Enrollment.student_id == student_id
+        )
+    )
+    if not e or not e.survey:
+        return []
+    return list(e.survey.roles or [])
+
+
+@router.get("/teams/{team_id}", response_model=TeamDetail)
+def get_team_detail(
+    team_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> TeamDetail:
+    """팀 상세: 팀원 정보 + 각자의 가능 시간 + 팀 공통 가능 시간."""
+    team = db.get(Team, team_id)
+    if team is None:
+        raise HTTPException(status_code=404, detail="팀을 찾을 수 없습니다.")
+    # 소유 확인: 그 팀이 속한 수업의 담당 교수인지
+    get_owned_class(db, team.class_id, prof)
+
+    members: list[TeamMemberDetail] = []
+    slot_sets: list[set[str]] = []
+    for tm in team.members:
+        u = db.get(User, tm.student_id)
+        slots = _student_avail(db, team.class_id, tm.student_id)
+        slot_sets.append(set(slots))
+        members.append(
+            TeamMemberDetail(
+                student_id=tm.student_id,
+                name=u.name if u else "(탈퇴/삭제된 학생)",
+                major=u.major if u else None,
+                year=u.year if u else None,
+                email=u.email if u else None,
+                assigned_role=tm.assigned_role,
+                preferred_roles=_student_roles(db, team.class_id, tm.student_id),
+                available_slots=slots,
+            )
+        )
+
+    # 팀 전원 공통 가능 시간(교집합). 슬롯 정보가 없는 팀원이 있으면 공통은 빈 집합.
+    common = sorted(set.intersection(*slot_sets)) if slot_sets and all(slot_sets) else []
+
+    return TeamDetail(
+        team_id=team.id,
+        name=team.name,
+        fit_score=float(team.fit_score),
+        class_id=team.class_id,
+        run_id=team.run_id,
+        members=members,
+        common_slots=common,
+    )

@@ -186,6 +186,9 @@ class MatchRequest(BaseModel):
     weights: Weights
     hard: HardConstraints = HardConstraints()
     note: str | None = None
+    # 이미 편성 완료된 수업을 다시 편성하려면 명시적으로 true 를 보낸다.
+    # (기본 false: 실수로 재편성해 기존 결과를 날리는 것을 방지)
+    force: bool = False
 
 
 class MemberOut(BaseModel):
@@ -298,3 +301,79 @@ class MatchV2Result(BaseModel):
     teams: list[V2TeamOut]
     trace: TraceOut                  # 조화도 추이(그래프용)
     parsed_rules: list[ParsedRuleOut]  # 주관식 해석 결과
+
+
+# ================================================================
+# 백엔드1 5번: 저장된 매칭 결과 조회
+# ================================================================
+class RunSummary(BaseModel):
+    """매칭 실행 이력 한 건 요약 (목록용)."""
+    run_id: uuid.UUID
+    class_id: uuid.UUID
+    team_size: int
+    team_count: int
+    avg_score: float | None
+    note: str | None
+    created_at: dt.datetime
+
+    model_config = {"from_attributes": True}
+
+
+# 저장된 결과 상세는 기존 MatchResultOut 를 그대로 재사용한다.
+
+
+# ================================================================
+# 백엔드1 6번: 팀 단위 상세 조회 (팀원 + 일정)
+# ================================================================
+class TeamMemberDetail(BaseModel):
+    """팀원 상세 — 기본 정보 + 희망 역할 + 배정 역할."""
+    student_id: uuid.UUID
+    name: str
+    major: str | None
+    year: int | None
+    email: str | None = None
+    assigned_role: str | None = None
+    preferred_roles: list[str] = []
+    # 이 학생이 가능하다고('y') 표시한 시간 슬롯들 ("day-block")
+    available_slots: list[str] = []
+
+
+class TeamDetail(BaseModel):
+    """팀 상세 — 팀원 목록 + 팀 전체가 공통으로 가능한 시간."""
+    team_id: uuid.UUID
+    name: str
+    fit_score: float
+    class_id: uuid.UUID
+    run_id: uuid.UUID
+    members: list[TeamMemberDetail]
+    # 팀원 전원이 공통으로 가능한 시간 슬롯("day-block")
+    common_slots: list[str] = []
+
+
+# ================================================================
+# 백엔드2 6·7번: 팀 수정 / 확정
+# ================================================================
+class MoveMemberRequest(BaseModel):
+    """팀원 이동: 한 학생을 다른 팀으로 옮긴다."""
+    student_id: uuid.UUID
+    to_team_id: uuid.UUID
+
+
+class SwapMembersRequest(BaseModel):
+    """두 학생의 팀을 서로 맞바꾼다."""
+    student_a: uuid.UUID
+    student_b: uuid.UUID
+
+
+class SetMemberRoleRequest(BaseModel):
+    """팀원의 배정 역할을 수정한다."""
+    student_id: uuid.UUID
+    assigned_role: str | None = None
+
+
+class RunStatusOut(BaseModel):
+    """매칭 실행(run)의 확정 상태."""
+    run_id: uuid.UUID
+    class_id: uuid.UUID
+    confirmed: bool
+    confirmed_at: dt.datetime | None = None

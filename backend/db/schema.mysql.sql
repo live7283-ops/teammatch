@@ -184,8 +184,10 @@ CREATE TABLE match_runs (
     h_fix_pair      TINYINT(1)  NOT NULL DEFAULT 0,
     h_split_pair    TINYINT(1)  NOT NULL DEFAULT 0,
     h_even_transfer TINYINT(1)  NOT NULL DEFAULT 0,
+    hard_detail     JSON        NULL,   -- v2 하드제약 세부값(상한/지정쌍/분산태그/역할최소)
     note            TEXT        NULL,
     avg_score       DECIMAL(5,2) NULL,
+    confirmed_at    TIMESTAMP   NULL,   -- 팀 확정 시각(NULL=검토중)
     created_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_runs_class (class_id),

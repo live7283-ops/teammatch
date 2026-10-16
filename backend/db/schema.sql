@@ -171,8 +171,10 @@ CREATE TABLE match_runs (
     h_fix_pair       BOOLEAN NOT NULL DEFAULT FALSE,
     h_split_pair     BOOLEAN NOT NULL DEFAULT FALSE,
     h_even_transfer  BOOLEAN NOT NULL DEFAULT FALSE,
+    hard_detail   JSONB,               -- v2 하드제약 세부값(상한/지정쌍/분산태그/역할최소)
     note          TEXT,                -- free-text professor instruction
     avg_score     NUMERIC(5,2),        -- overall fit across teams
+    confirmed_at  TIMESTAMPTZ,         -- 팀 확정 시각(NULL=검토중)
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

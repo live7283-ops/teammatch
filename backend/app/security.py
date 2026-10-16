@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from .config import get_settings
 from .database import get_db
-from .models import User
+from .models import Class, User
 
 _pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -73,3 +73,18 @@ def require_student(user: User = Depends(get_current_user)) -> User:
     if user.role != "student":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="학생 권한이 필요합니다.")
     return user
+
+
+def get_owned_class(db: Session, class_id: uuid.UUID, prof: User) -> Class:
+    """교수 본인이 소유한 수업만 반환하는 공용 소유 확인 함수.
+
+    과목별 접근 제어의 단일 진실 공급원(single source of truth).
+    모든 교수용 라우터가 각자 구현하지 않고 이 함수를 재사용한다.
+
+    보안 정책: '존재하지 않는 수업'과 '남의 수업'을 구분하지 않고 404로
+    통일한다. 403으로 구분하면 class_id 의 존재 여부가 외부로 노출된다.
+    """
+    c = db.get(Class, class_id)
+    if not c or c.professor_id != prof.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="수업을 찾을 수 없습니다.")
+    return c
