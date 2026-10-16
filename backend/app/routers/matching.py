@@ -23,9 +23,11 @@ from ..schemas import (
     HardConstraints,
     MatchRequest,
     MatchResultOut,
+    MatchRunSummary,
     MemberOut,
     PresetOut,
     TeamOut,
+    TeamUpdate,
     Weights,
 )
 from ..security import require_professor
@@ -211,3 +213,177 @@ def list_presets(prof: User = Depends(require_professor), db: Session = Depends(
         )
         for p in rows
     ]
+
+# ================================================================
+# 2. 매칭 결과 조회 API
+# ================================================================
+
+@router.get("/classes/{class_id}/matches", response_model=list[MatchRunSummary])
+def list_match_runs(
+    class_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> list[MatchRunSummary]:
+    """해당 과목의 과거 매칭 실행 이력 목록을 조회합니다."""
+    c = db.get(Class, class_id)
+    if not c or c.professor_id != prof.id:
+        raise HTTPException(status_code=404, detail="수업을 찾을 수 없습니다.")
+
+    runs = db.scalars(
+        select(MatchRun)
+        .where(MatchRun.class_id == class_id)
+        .order_by(MatchRun.created_at.desc())
+    ).all()
+
+    out: list[MatchRunSummary] = []
+    for r in runs:
+        out.append(
+            MatchRunSummary(
+                id=r.id,
+                class_id=r.class_id,
+                team_size=r.team_size,
+                avg_score=float(r.avg_score) if r.avg_score is not None else None,
+                note=r.note,
+                created_at=r.created_at,
+                team_count=len(r.teams),
+            )
+        )
+    return out
+
+
+@router.get("/matchings/{run_id}", response_model=MatchResultOut)
+def get_match_run(
+    run_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> MatchResultOut:
+    """특정 매칭 실행 결과의 상세 팀 구성 및 팀원 목록을 조회합니다."""
+    run = db.get(MatchRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="매칭 결과를 찾을 수 없습니다.")
+
+    c = db.get(Class, run.class_id)
+    if not c or c.professor_id != prof.id:
+        raise HTTPException(status_code=404, detail="수업을 찾을 수 없거나 권한이 없습니다.")
+
+    teams_out: list[TeamOut] = []
+    for t in run.teams:
+        members_out: list[MemberOut] = []
+        for tm in t.members:
+            student = db.get(User, tm.student_id)
+            if student:
+                members_out.append(
+                    MemberOut(
+                        student_id=student.id,
+                        name=student.name,
+                        major=student.major,
+                        year=student.year,
+                        assigned_role=tm.assigned_role,
+                    )
+                )
+        teams_out.append(
+            TeamOut(
+                id=t.id,
+                name=t.name,
+                fit_score=float(t.fit_score),
+                members=members_out,
+            )
+        )
+
+    return MatchResultOut(
+        run_id=run.id,
+        class_id=run.class_id,
+        team_size=run.team_size,
+        avg_score=float(run.avg_score) if run.avg_score is not None else None,
+        teams=teams_out,
+    )
+
+
+# ================================================================
+# 3. 팀 수정 및 최종 확정 API
+# ================================================================
+
+@router.put("/teams/{team_id}", response_model=TeamOut)
+def update_team(
+    team_id: uuid.UUID,
+    body: TeamUpdate,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> TeamOut:
+    """팀 이름 변경 및 팀원/역할 수동 변경."""
+    team = db.get(Team, team_id)
+    if not team:
+        raise HTTPException(status_code=404, detail="팀을 찾을 수 없습니다.")
+
+    c = db.get(Class, team.class_id)
+    if not c or c.professor_id != prof.id:
+        raise HTTPException(status_code=404, detail="수업을 찾을 수 없거나 권한이 없습니다.")
+
+    # 1. 팀 이름 변경
+    if body.name is not None:
+        team.name = body.name
+
+    # 2. 팀원/역할 수동 조정
+    if body.members is not None:
+        team.members.clear()
+        db.flush()
+
+        for m in body.members:
+            student = db.get(User, m.student_id)
+            if not student or student.role != "student":
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"존재하지 않거나 학생 계정이 아닙니다: {m.student_id}",
+                )
+            team.members.append(
+                TeamMember(
+                    team_id=team.id,
+                    student_id=m.student_id,
+                    assigned_role=m.assigned_role,
+                )
+            )
+
+    db.commit()
+    db.refresh(team)
+
+    members_out: list[MemberOut] = []
+    for tm in team.members:
+        s = db.get(User, tm.student_id)
+        if s:
+            members_out.append(
+                MemberOut(
+                    student_id=s.id,
+                    name=s.name,
+                    major=s.major,
+                    year=s.year,
+                    assigned_role=tm.assigned_role,
+                )
+            )
+
+    return TeamOut(
+        id=team.id,
+        name=team.name,
+        fit_score=float(team.fit_score),
+        members=members_out,
+    )
+
+
+@router.post("/matchings/{run_id}/confirm")
+def confirm_match_run(
+    run_id: uuid.UUID,
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """해당 매칭 결과를 최종 확정하고 과목 상태를 '편성 확정'으로 전환합니다."""
+    run = db.get(MatchRun, run_id)
+    if not run:
+        raise HTTPException(status_code=404, detail="매칭 결과를 찾을 수 없습니다.")
+
+    c = db.get(Class, run.class_id)
+    if not c or c.professor_id != prof.id:
+        raise HTTPException(status_code=404, detail="수업을 찾을 수 없거나 권한이 없습니다.")
+
+    c.status = "편성 확정"
+    db.commit()
+
+    return {"message": "팀 편성이 성공적으로 확정되었습니다.", "status": c.status}
