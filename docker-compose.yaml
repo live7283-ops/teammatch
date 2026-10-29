@@ -1,0 +1,37 @@
+services:
+    # 1. PostgreSQL 데이터베이스 서비스
+    db:
+        image: postgres:15-alpine
+        container_name: teammatch-db
+        restart: always
+        environment:
+            POSTGRES_DB: teammatch
+            POSTGRES_USER: teammatch
+            POSTGRES_PASSWORD: teammatch
+        ports:
+            - "5432:5432"
+        volumes:
+            - pgdata:/var/lib/postgresql/data
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U teammatch -d teammatch"]
+            interval: 5s
+            timeout: 5s
+            retries: 5
+
+    # 2. FastAPI 백엔드 서비스
+    backend:
+        build:
+            context: ./backend
+            dockerfile: Dockerfile
+        container_name: teammatch-backend
+        restart: always
+        ports:
+            - "8000:8000"
+        environment:
+            - DATABASE_URL=postgresql+psycopg://teammatch:teammatch@db:5432/teammatch
+        depends_on:
+            db:
+                condition: service_healthy
+
+volumes:
+    pgdata:
