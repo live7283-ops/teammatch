@@ -32,17 +32,10 @@ from ..schemas import (
     V2MemberOut,
     V2TeamOut,
 )
-from ..security import require_professor
+from ..security import get_owned_class, require_professor
 from .matching import _load_candidates
 
 router = APIRouter(prefix="/api", tags=["matching-v2"])
-
-
-def _owned_class(db: Session, class_id: uuid.UUID, prof: User) -> Class:
-    c = db.get(Class, class_id)
-    if not c or c.professor_id != prof.id:
-        raise HTTPException(status_code=404, detail="수업을 찾을 수 없습니다.")
-    return c
 
 
 def _build_hard(body: MatchV2Request, note_hard: HardRules | None) -> HardRules:
@@ -63,6 +56,17 @@ def _build_hard(body: MatchV2Request, note_hard: HardRules | None) -> HardRules:
     return hard
 
 
+def _hard_to_detail(hard: HardRules) -> dict:
+    """하드 제약 세부값을 JSON 저장용 dict로 직렬화 (백엔드2 5번)."""
+    return {
+        "same_major_max": hard.same_major_max,
+        "separate_pairs": [list(p) for p in hard.separate_pairs],
+        "fixed_pairs": [list(p) for p in hard.fixed_pairs],
+        "spread_tags": list(hard.spread_tags),
+        "role_minimums": dict(hard.role_minimums),
+    }
+
+
 @router.post("/classes/{class_id}/precheck", response_model=PrecheckOut)
 def run_precheck(
     class_id: uuid.UUID,
@@ -70,7 +74,7 @@ def run_precheck(
     prof: User = Depends(require_professor),
     db: Session = Depends(get_db),
 ) -> PrecheckOut:
-    _owned_class(db, class_id, prof)
+    get_owned_class(db, class_id, prof)
     candidates, _ = _load_candidates(db, class_id)
 
     parsed = nl_rules.parse_requirements(body.note or "")
@@ -93,11 +97,12 @@ def run_match_v2(
     prof: User = Depends(require_professor),
     db: Session = Depends(get_db),
 ) -> MatchV2Result:
-    c = _owned_class(db, class_id, prof)
+    c = get_owned_class(db, class_id, prof)
     candidates, _ = _load_candidates(db, class_id)
     if len(candidates) < body.team_size:
         raise HTTPException(
-            status_code=422, detail=f"편성 가능한 제출자가 부족합니다. (현재 {len(candidates)}명)"
+            status_code=422,
+            detail=f"편성 가능한 제출자가 부족합니다. (현재 {len(candidates)}명)",
         )
 
     # 1) 주관식 요구사항 해석 → 하드/소프트 보정
@@ -118,7 +123,7 @@ def run_match_v2(
     # 3) J 최적화 (초기배정 → LS → SA → best-of-3)
     sol = optimize(candidates, body.team_size, weights, hard, starts=body.starts, seed=body.seed)
 
-    # 4) 결과 저장 (기존 테이블 재사용)
+    # 4) 결과 저장 (기존 테이블 재사용). hard_detail 에 세부 하드제약 보존.
     run = MatchRun(
         class_id=class_id,
         team_size=body.team_size,
@@ -127,6 +132,7 @@ def run_match_v2(
         h_fix_pair=bool(hard.fixed_pairs),
         h_split_pair=bool(hard.separate_pairs),
         h_even_transfer=bool(hard.spread_tags),
+        hard_detail=_hard_to_detail(hard),
         note=body.note,
         avg_score=sol.obj.avg_fit,
     )

@@ -6,7 +6,7 @@ import secrets
 import string
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -20,7 +20,7 @@ from ..schemas import (
     ClassUpdate,
     JoinRequest,
 )
-from ..security import get_current_user, require_professor, require_student
+from ..security import get_current_user, get_owned_class, require_professor, require_student
 
 router = APIRouter(prefix="/api/classes", tags=["classes"])
 
@@ -48,14 +48,6 @@ def _to_out(db: Session, c: Class) -> ClassOut:
     out.enrolled = enrolled
     out.submitted = submitted
     return out
-
-
-def _owned_class(db: Session, class_id: uuid.UUID, prof: User) -> Class:
-    """교수 본인이 소유한 수업만 돌려준다. 아니면 404."""
-    c = db.get(Class, class_id)
-    if not c or c.professor_id != prof.id:
-        raise HTTPException(status_code=404, detail="수업을 찾을 수 없습니다.")
-    return c
 
 
 @router.post("", response_model=ClassOut, status_code=status.HTTP_201_CREATED)
@@ -95,7 +87,7 @@ def list_classes(user: User = Depends(get_current_user), db: Session = Depends(g
 def roster(
     class_id: uuid.UUID, prof: User = Depends(require_professor), db: Session = Depends(get_db)
 ) -> list[dict]:
-    _owned_class(db, class_id, prof)
+    get_owned_class(db, class_id, prof)
     rows = db.scalars(
         select(Enrollment).where(Enrollment.class_id == class_id)
     ).all()
@@ -148,7 +140,7 @@ def update_class(
     db: Session = Depends(get_db),
 ) -> ClassOut:
     """과목 수정(부분 수정). 교수 본인 수업만 가능."""
-    c = _owned_class(db, class_id, prof)
+    c = get_owned_class(db, class_id, prof)
     for field in ("name", "code", "term", "capacity", "kind", "survey_deadline", "status"):
         value = getattr(body, field)
         if value is not None:
@@ -158,21 +150,22 @@ def update_class(
     return _to_out(db, c)
 
 
-@router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{class_id}", status_code=status.HTTP_204_NO_CONTENT, response_class=Response, response_model=None)
 def delete_class(
     class_id: uuid.UUID,
     prof: User = Depends(require_professor),
     db: Session = Depends(get_db),
-) -> None:
+) -> Response:
     """과목 삭제. 교수 본인 수업만 가능.
 
     주의: FK가 ON DELETE CASCADE 라서 수강/설문/매칭 결과도 함께 삭제된다.
     (이미 편성이 끝난 수업을 지울 때는 신중해야 함)
+    204는 본문이 없는 것이 HTTP 규격이므로, None 대신 빈 Response를 명시 반환.
     """
-    c = _owned_class(db, class_id, prof)
+    c = get_owned_class(db, class_id, prof)
     db.delete(c)
     db.commit()
-    return None
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ================================================================
@@ -190,7 +183,7 @@ def list_candidates(
     학과/희망역할 분포도 함께 집계해, 교수가 가중치·하드제약을
     정하기 전에 참고할 수 있게 한다.
     """
-    _owned_class(db, class_id, prof)
+    get_owned_class(db, class_id, prof)
 
     rows = db.scalars(select(Enrollment).where(Enrollment.class_id == class_id)).all()
 

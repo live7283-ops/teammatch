@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
-from .routers import auth, classes, matching, matching_v2, surveys
+from .routers import auth, classes, matching, matching_v2, surveys, teams
 
 settings = get_settings()
 
@@ -26,6 +26,7 @@ app.include_router(classes.router)
 app.include_router(surveys.router)
 app.include_router(matching.router)
 app.include_router(matching_v2.router)
+app.include_router(teams.router)
 
 
 @app.get("/health", tags=["meta"])

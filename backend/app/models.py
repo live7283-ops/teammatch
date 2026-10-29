@@ -6,6 +6,7 @@ import uuid
 
 from sqlalchemy import (
     ARRAY,
+    JSON,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -166,8 +167,12 @@ class MatchRun(Base):
     h_fix_pair: Mapped[bool] = mapped_column(Boolean, default=False)
     h_split_pair: Mapped[bool] = mapped_column(Boolean, default=False)
     h_even_transfer: Mapped[bool] = mapped_column(Boolean, default=False)
+    # v2 하드제약 세부값(상한/지정쌍/분산태그/역할최소) 원본 보존 — bool 플래그로 못 담는 정보.
+    hard_detail: Mapped[dict | None] = mapped_column(JSON)
     note: Mapped[str | None] = mapped_column(Text)
     avg_score: Mapped[float | None] = mapped_column(Numeric(5, 2))
+    # 팀 확정 시각. NULL이면 '검토 중', 값이 있으면 '확정됨'.
+    confirmed_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     teams: Mapped[list[Team]] = relationship(cascade="all, delete-orphan")
