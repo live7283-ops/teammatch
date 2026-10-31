@@ -179,6 +179,8 @@ CREATE TABLE match_runs (
 );
 
 CREATE INDEX idx_runs_class ON match_runs (class_id);
+-- 최신 결과 조회(get_latest_result/list_runs)는 class_id 로 걸러 created_at 역순 정렬한다.
+CREATE INDEX idx_runs_class_created ON match_runs (class_id, created_at DESC);
 
 CREATE TABLE teams (
     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -200,6 +202,8 @@ CREATE TABLE team_members (
 );
 
 CREATE INDEX idx_team_members_team ON team_members (team_id);
+-- 결과 조회 시 학생ID로 User 를 조인/역조회하므로 인덱스 추가.
+CREATE INDEX idx_team_members_student ON team_members (student_id);
 
 -- ----------------------------------------------------------------
 -- Built-in presets seed (frontend ps0..ps4).

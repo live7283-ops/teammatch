@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import get_settings
+from .errors import register_error_handlers
 from .routers import auth, classes, matching, matching_v2, surveys, teams
 
 settings = get_settings()
@@ -20,6 +21,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+register_error_handlers(app)
 
 app.include_router(auth.router)
 app.include_router(classes.router)

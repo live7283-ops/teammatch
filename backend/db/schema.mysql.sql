@@ -191,6 +191,8 @@ CREATE TABLE match_runs (
     created_at      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     KEY idx_runs_class (class_id),
+    -- 최신 결과 조회(class_id 필터 + created_at 역순)용 복합 인덱스.
+    KEY idx_runs_class_created (class_id, created_at DESC),
     CONSTRAINT fk_runs_class FOREIGN KEY (class_id)
         REFERENCES classes (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -218,6 +220,7 @@ CREATE TABLE team_members (
     PRIMARY KEY (id),
     UNIQUE KEY uq_team_student (team_id, student_id),
     KEY idx_team_members_team (team_id),
+    KEY idx_team_members_student (student_id),
     CONSTRAINT fk_tm_team FOREIGN KEY (team_id)
         REFERENCES teams (id) ON DELETE CASCADE,
     CONSTRAINT fk_tm_student FOREIGN KEY (student_id)
