@@ -181,3 +181,53 @@ def evaluate(candidates, teams, weights: SoftWeights, hard: HardRules, team_size
     out["team_count"] = len(ids)
     out["elapsed_ms"] = int((time.perf_counter() - t0) * 1000)
     return out
+
+
+# ── 저장된 편성 다시 채점 (팀 수정 API용) ──────────────────────────────
+def hard_from_detail(detail: dict | None) -> HardRules:
+    """match_runs.hard_detail(JSON) → HardRules."""
+    d = detail or {}
+    return HardRules(
+        same_major_max=d.get("same_major_max"),
+        separate_pairs=[tuple(p) for p in d.get("separate_pairs") or []],
+        fixed_pairs=[tuple(p) for p in d.get("fixed_pairs") or []],
+        spread_tags=list(d.get("spread_tags") or []),
+        role_minimums={k: int(v) for k, v in (d.get("role_minimums") or {}).items()},
+    )
+
+
+def rescore_run(run, candidates) -> dict:
+    """교수가 팀원을 옮긴 뒤, 저장된 편성(run)을 지금 구성 그대로 다시 채점해 점수를 갱신한다.
+
+    run        : MatchRun처럼 .teams[].members[].student_id, .teams[].fit_score,
+                 .w_major/.w_role/.w_time/.w_trait, .hard_detail, .team_size, .avg_score 를 가진 객체
+    candidates : 그 수업의 Candidate 목록 (routers.matching._load_candidates)
+    팀원 중 후보 목록에 없는 학생(설문 철회 등)은 채점에서 빼고, 빈 팀은 0점으로 둔다.
+    돌려주는 dict는 evaluate()와 같은 모양(teams, conditions, avg_fit, …) + team_ids.
+    """
+    weights = SoftWeights(major=run.w_major, role=run.w_role, time=run.w_time, trait=run.w_trait)
+    hard = hard_from_detail(getattr(run, "hard_detail", None))
+    by_id = {c.student_id: c for c in candidates}
+    teams = list(run.teams)
+    ids = [[str(tm.student_id) for tm in t.members if str(tm.student_id) in by_id] for t in teams]
+    skipped = [str(tm.student_id) for t in teams for tm in t.members if str(tm.student_id) not in by_id]
+    live = [i for i, member_ids in enumerate(ids) if member_ids]
+    for i, t in enumerate(teams):
+        if i not in live:
+            t.fit_score = 0
+    if not live:
+        run.avg_score = 0
+        return {"teams": [], "conditions": [], "avg_fit": 0.0, "min_fit": 0.0, "hard_violations": 0,
+                "team_ids": [], "skipped_members": skipped}
+    ev = Evaluator([by_id[s] for i in live for s in ids[i]], weights, hard, len(live))
+    teams_idx = [[ev.idx[s] for s in ids[i]] for i in live]
+    out = _details(ev, teams_idx, hard, getattr(run, "team_size", None))
+    scores = []
+    for k, i in enumerate(live):
+        fit = ev.team(teams_idx[k])[0]
+        teams[i].fit_score = round(fit, 2)
+        scores.append(fit)
+    run.avg_score = round(sum(scores) / len(scores), 2)
+    out["team_ids"] = [getattr(teams[i], "id", None) for i in live]
+    out["skipped_members"] = skipped
+    return out
