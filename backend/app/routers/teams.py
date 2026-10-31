@@ -15,6 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..engine.explain import rescore_run
 from ..models import MatchRun, Team, TeamMember, User
 from ..schemas import (
     MoveMemberRequest,
@@ -23,6 +24,7 @@ from ..schemas import (
     SwapMembersRequest,
 )
 from ..security import get_owned_class, require_professor
+from .matching import _load_candidates
 
 router = APIRouter(prefix="/api", tags=["teams"])
 
@@ -48,6 +50,19 @@ def _team_in_run(db: Session, run: MatchRun, team_id: uuid.UUID) -> Team:
     return team
 
 
+def _rescore(db: Session, run: MatchRun) -> None:
+    """팀 구성이 바뀌면 AI 엔진으로 팀 점수(fit_score)와 평균(avg_score)을 다시 계산한다.
+
+    match-v2 편성(hard_detail 있음)만 대상. 기존 그리디 엔진(/match) 편성은 점수 체계가 달라 건드리지 않는다.
+    """
+    if run.hard_detail is None:
+        return
+    db.flush()
+    db.expire_all()                      # 방금 바꾼 소속 팀을 반영해 다시 읽기
+    candidates, _ = _load_candidates(db, run.class_id)
+    rescore_run(run, candidates)
+
+
 def _find_member(run: MatchRun, student_id: uuid.UUID) -> tuple[Team, TeamMember]:
     for team in run.teams:
         for tm in team.members:
@@ -70,6 +85,7 @@ def move_member(
     dst = _team_in_run(db, run, body.to_team_id)
     if tm.team_id != dst.id:  # 이미 그 팀이면 변화 없음
         tm.team_id = dst.id
+        _rescore(db, run)
         db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
@@ -86,6 +102,7 @@ def swap_members(
     _ta, a = _find_member(run, body.student_a)
     _tb, b = _find_member(run, body.student_b)
     a.team_id, b.team_id = b.team_id, a.team_id
+    _rescore(db, run)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
