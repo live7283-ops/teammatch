@@ -12,6 +12,8 @@ services:
             - "5432:5432"
         volumes:
             - pgdata:/var/lib/postgresql/data
+            # 처음 띄울 때(빈 볼륨) 테이블 자동 생성. 이미 볼륨이 있으면 docker compose down -v 후 다시 up
+            - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
         healthcheck:
             test: ["CMD-SHELL", "pg_isready -U teammatch -d teammatch"]
             interval: 5s
@@ -29,6 +31,11 @@ services:
             - "8000:8000"
         environment:
             - DATABASE_URL=postgresql+psycopg://teammatch:teammatch@db:5432/teammatch
+            # 교수 메모 LLM 해석 (선택): 이 파일 옆 .env 또는 셸 환경변수에서 읽음. 비어 있으면 규칙 기반 해석.
+            - TEAMFIT_LLM_PROVIDER=${TEAMFIT_LLM_PROVIDER:-}
+            - TEAMFIT_LLM_MODEL=${TEAMFIT_LLM_MODEL:-}
+            - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+            - OPENAI_API_KEY=${OPENAI_API_KEY:-}
         depends_on:
             db:
                 condition: service_healthy
