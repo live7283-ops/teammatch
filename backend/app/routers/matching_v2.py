@@ -144,12 +144,15 @@ def run_match_v2(
     min_score = min(scores) if scores else 0.0
 
     teams_out: list[V2TeamOut] = []
+    engine_teams = (getattr(sol, "details", None) or {}).get("teams") or []
     for i, team in enumerate(sol.teams, start=1):
         score = sol.obj.team_scores[i - 1] if i - 1 < len(sol.obj.team_scores) else 0.0
         row = Team(run_id=run.id, class_id=class_id, name=f"{i}팀", fit_score=score)
         db.add(row)
         db.flush()
         roles = assign_roles(team)
+        if i - 1 < len(engine_teams):  # AI 엔진이 점수 계산에 쓴 역할 배정(1·2지망 반영)을 그대로 사용
+            roles = {m["student_id"]: m["assigned_role"] for m in engine_teams[i - 1]["members"]}
         members_out: list[V2MemberOut] = []
         for m in team:
             db.add(TeamMember(team_id=row.id, student_id=uuid.UUID(m.student_id),

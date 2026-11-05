@@ -128,6 +128,10 @@ def parse_requirements(
     (운영에서 LLM 연동 시: 프롬프트로 DSL(JSON)을 받아 ParsedRule로 변환)
     """
     rules: list[ParsedRule] = []
+    if llm is None:
+        # LLM 설정(TEAMFIT_LLM_PROVIDER 등)이 있으면 자동으로 사용, 없으면 None → 규칙 기반
+        from .llm_rules import default_llm
+        llm = default_llm()
     if llm is not None:
         try:
             rules = llm(text) or []
