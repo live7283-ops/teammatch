@@ -1,7 +1,7 @@
 """시연용 45명 학생 및 설문 데이터 자동 생성 스크립트.
 
 실행 방법:
-    docker compose exec backend python -m test.seed_demo
+    docker compose exec backend python -m tests.seed_demo
     (또는 로컬 환경: python -m test.seed_demo)
 """
 
@@ -37,15 +37,20 @@ MAJORS = [
     "데이터사이언스학과", "경영학과", "산업디자인학과", "정보통신공학과"
 ]
 
-ROLES_POOL = ["PM", "Frontend", "Backend", "AI/ML", "UI/UX", "Data"]
+# 기존 (수정 전)
+# ROLES_POOL = ["PM", "Frontend", "Backend", "AI/ML", "UI/UX", "Data"]
 
+# 변경 (수정 후: 프론트엔드 및 v2 엔진 규격 통일)
+ROLES_POOL = ["기획", "프론트엔드", "백엔드", "데이터", "디자인", "발표"]
+
+# 기존 역할 태그(ROLES_POOL) 규격에 맞춰 키값 한글화
 SKILLS_POOL = {
-    "Frontend": ["React", "TypeScript", "Next.js", "Vue.js", "CSS/Tailwind"],
-    "Backend": ["FastAPI", "Python", "Node.js", "PostgreSQL", "Docker", "Java/Spring"],
-    "AI/ML": ["PyTorch", "Scikit-Learn", "Python", "OpenCV", "LangChain"],
-    "PM": ["Jira", "Notion", "커뮤니케이션", "일정 관리"],
-    "UI/UX": ["Figma", "Adobe XD", "와이어프레임", "사용자 조사"],
-    "Data": ["SQL", "Pandas", "Tableau", "Data Analysis"]
+    "기획": ["Jira", "Notion", "커뮤니케이션", "일정 관리", "서비스 기획"],
+    "프론트엔드": ["React", "TypeScript", "Next.js", "Vue.js", "CSS/Tailwind"],
+    "백엔드": ["FastAPI", "Python", "Node.js", "PostgreSQL", "Docker", "Java/Spring"],
+    "데이터": ["SQL", "Pandas", "PyTorch", "Scikit-Learn", "Tableau", "데이터 분석"],
+    "디자인": ["Figma", "Adobe XD", "와이어프레임", "UI 디자인", "사용자 조사"],
+    "발표": ["PPT 작성", "프레젠테이션", "스피치", "자료 구조화", "커뮤니케이션"]
 }
 
 

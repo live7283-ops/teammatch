@@ -9,19 +9,33 @@
 실행 방법:
     docker compose exec backend pytest tests/test_full_matching_flow.py -v -s
 """
-
+import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.database import engine
 from app.main import app
-from app.models import Class, MatchRun, Team, TeamMember
+from app.models import MatchRun, Team, TeamMember
 
 client = TestClient(app)
 
 
+def check_db_connection() -> bool:
+    """DB 접속 가능 여부 점검 함수"""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+
+
 def test_full_matching_e2e_flow():
+    # 0. DB가 없을 경우 테스트 skip
+    if not check_db_connection():
+        pytest.skip("데이터베이스에 연결할 수 없어 E2E 통합 테스트를 건너뜁니다.")
+
     # 1. 교수 계정 로그인 및 토큰 발급
     login_res = client.post(
         "/api/auth/login",
@@ -40,7 +54,7 @@ def test_full_matching_e2e_flow():
     assert demo_class is not None, "DEMO45 수업이 존재하지 않습니다. (seed_demo 실행 필요)"
     class_id = demo_class["id"]
 
-    # 3. v2 매칭 알고리즘 실행 (Pydantic 중첩 스키마 적용)
+    # 3. v2 매칭 알고리즘 실행 (hard 페이로드 반영)
     payload = {
         "team_size": 4,
         "weights": {
@@ -49,7 +63,7 @@ def test_full_matching_e2e_flow():
             "time": 3,
             "trait": 3
         },
-        "hard_constraints": {
+        "hard": {
             "same_major_max": 2
         }
     }
