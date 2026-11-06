@@ -1,8 +1,8 @@
 """시연용 45명 학생 및 설문 데이터 자동 생성 스크립트.
 
 실행 방법:
-    docker compose exec backend python -m tests.seed_demo
-    (또는 로컬 환경: python -m test.seed_demo)
+    docker compose exec backend python -m scripts.seed_demo
+    (또는 로컬 환경: python -m scripts.seed_demo)
 """
 
 import datetime as dt
