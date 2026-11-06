@@ -203,7 +203,7 @@ def run_seed():
             # 가능 시간대(SurveyAvailability) 주입 (월~일, 0~3블록)
             db.query(SurveyAvailability).filter(SurveyAvailability.survey_id == survey.id).delete()
             for day in range(7):  # 0=월 ~ 6=일
-                for block in range(4):  # 0~3 (오전/오후/저녁/야간)
+                for block in range(12):  # 프론트엔드 12개 시간대 블록 규격에 맞춤(09시~21시)
                     # 약 70% 확률로 가능(y), 30% 확률로 불가능(n)
                     is_available = "y" if random.random() < 0.7 else "n"
                     db.add(
