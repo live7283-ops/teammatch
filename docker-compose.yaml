@@ -29,6 +29,8 @@ services:
         restart: always
         ports:
             - "8000:8000"
+        volumes:
+            - ./backend:/app
         environment:
             - DATABASE_URL=postgresql+psycopg://teammatch:teammatch@db:5432/teammatch
             # 교수 메모 LLM 해석 (선택): 이 파일 옆 .env 또는 셸 환경변수에서 읽음. 비어 있으면 규칙 기반 해석.
