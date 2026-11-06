@@ -10,6 +10,7 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    Enum,
     ForeignKey,
     Numeric,
     SmallInteger,
@@ -32,7 +33,10 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=_uuid)
-    role: Mapped[str] = mapped_column(String, nullable=False)  # 'student' | 'professor'
+    # schema.sql의 PostgreSQL ENUM 타입과 맞춰야 psycopg3로 INSERT/UPDATE가 된다 (String이면 DatatypeMismatch)
+    role: Mapped[str] = mapped_column(
+        Enum("student", "professor", name="user_role", create_constraint=False), nullable=False
+    )
     email: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     password_hash: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
@@ -62,7 +66,10 @@ class Class(Base):
     join_code: Mapped[str] = mapped_column(String, nullable=False, unique=True)
     survey_deadline: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     kind: Mapped[str | None] = mapped_column(String)
-    status: Mapped[str] = mapped_column(String, default="설문 진행 중")
+    status: Mapped[str] = mapped_column(
+        Enum("설문 진행 중", "편성 대기", "편성 완료", name="class_status", create_constraint=False),
+        default="설문 진행 중",
+    )
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     enrollments: Mapped[list[Enrollment]] = relationship(back_populates="klass", cascade="all, delete-orphan")
@@ -130,7 +137,9 @@ class SurveyAvailability(Base):
     survey_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("survey_responses.id", ondelete="CASCADE"))
     day: Mapped[int] = mapped_column(SmallInteger, nullable=False)  # 0=월..6=일
     block: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    state: Mapped[str] = mapped_column(String, nullable=False)  # 'y' | 'n'
+    state: Mapped[str] = mapped_column(
+        Enum("y", "n", name="avail_state", create_constraint=False), nullable=False
+    )  # 'y' | 'n'
 
 
 class MatchPreset(Base):

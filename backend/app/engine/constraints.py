@@ -1,146 +1,277 @@
-"""소프트 가중치, 하드 제약, 목적함수 J.
+"""TeamFit 엔진 v1.1 — 점수 축과 하드 규칙.
 
-사진 공식 반영
---------------
-- 소프트(조화도) 점수:   score = Σ(wₖ · sₖ) / Σ(wₖ) × 100
-    · sₖ : 축별 0..1 점수(전공 다양성 / 역할 균형 / 일정 / 성향)
-    · wₖ : 교수가 설정한 1..5 가중치
-- 목적함수 J:            J = 평균 조화도 + 최저 팀 점수 − 1000 × (하드 위반 수)
-    · "평균 + 최저"를 함께 보기 때문에, 전체 평균뿐 아니라
-      가장 약한 팀(주황 테두리)까지 끌어올리는 방향으로 최적화됩니다.
+백엔드 Candidate(student_id, name, major, year, roles, free_slots, traits)를 그대로 받는다.
+- roles      : 희망 역할 목록, 앞이 1지망 (1.0 / 0.6 / 0.3)
+- free_slots : {"day-block"} — day 0~6(월~일), block 0~11(09~21시, 1시간)
+- traits     : 1~5, 0 = 무응답 (index.html 라벨)
+               pace 작업 페이스(1 마감 직전 집중 ~ 5 미리 완성), prep 의사결정(1 신속 ~ 5 충분한 논의),
+               lead 주도성(1 서포트 ~ 5 주도적 리더십), comm 소통 빈도(1 정기 회의 ~ 5 수시 공유)
+공개 이름(SoftWeights, HardRules, soft_score, team_violations, total_violations,
+Objective, objective, _has_tag)은 라우터·테스트와의 계약이므로 바꾸지 않는다.
 """
 from __future__ import annotations
 
+import math
+import re
+from collections import Counter
 from dataclasses import dataclass, field
 
-# 기존 엔진의 축별 점수 함수와 후보 타입을 재사용한다.
-from ..matching import (
-    Candidate,
-    _major_score,
-    _role_score,
-    _time_score,
-    _trait_score,
-)
-
-HARD_PENALTY = 1000.0  # 사진: "위반 시 1,000 패널티 = 사실상 금지"
+ROLES = ("기획", "프론트엔드", "백엔드", "데이터", "디자인", "발표")
+DEV_ROLES = frozenset({"프론트엔드", "백엔드", "데이터"})
+RANK_VALUE = (1.0, 0.6, 0.3)          # 1지망, 2지망, 3지망 이하
+TIME_TARGET_HOURS = 6                 # 주 6시간 공통 시간이면 만점
+LEAD_HIGH = 4                         # traits.lead >= 4 → 화면 라벨 "주도적 리드" (index.html 확인)
+TRAIT_KEYS = ("pace", "prep", "comm")  # 비슷할수록 좋은 성향
+NEUTRAL = 0.75                        # 성향 무응답일 때 중립값
+HARD_PENALTY = 1000.0
+MAXIMIN_LAMBDA = 1.0
+DAY_NAMES = ("월", "화", "수", "목", "금", "토", "일")
+_YEAR_RE = re.compile(r"^\s*(\d)\s*학년\s*$")
 
 
 @dataclass
 class SoftWeights:
-    """축별 1..5 가중치 (사진 '가중치' 슬라이더)."""
+    major: float = 4
+    role: float = 5
+    time: float = 3
+    trait: float = 3
 
-    major: int = 3   # 전공 다양성
-    role: int = 3    # 역할 역량 균형
-    time: int = 3    # 일정 호환성
-    trait: int = 3   # 성향 호환성
+    def total(self) -> float:
+        return float(self.major + self.role + self.time + self.trait)
 
 
 @dataclass
 class HardRules:
-    """하드 제약 (사진 '하드 제약' 체크 + 지정 목록).
-
-    same_major_max : 한 팀 내 같은 학과 허용 인원 상한 (예: 2명 이하)
-    separate_pairs : 서로 다른 팀으로 분리해야 하는 학생 쌍들
-    fixed_pairs    : 반드시 같은 팀으로 고정할 학생 쌍들
-    spread_tags    : 각 팀에 고르게 배치해야 하는 태그(예: 편입생/유학생)
-    role_minimums  : 각 팀이 최소 n명 보유해야 하는 역할/경험
-                     (예: 발표 경험 1명 이상, 개발 경험 1명 이상)
-    """
-
     same_major_max: int | None = None
-    separate_pairs: list[tuple[str, str]] = field(default_factory=list)
-    fixed_pairs: list[tuple[str, str]] = field(default_factory=list)
-    spread_tags: list[str] = field(default_factory=list)
-    role_minimums: dict[str, int] = field(default_factory=dict)
+    separate_pairs: list = field(default_factory=list)   # [(student_id, student_id)]
+    fixed_pairs: list = field(default_factory=list)
+    spread_tags: list = field(default_factory=list)      # 팀마다 고르게: 팀당 최대 ceil(보유자/팀 수)
+    role_minimums: dict = field(default_factory=dict)    # {태그: 팀당 최소 인원}
 
 
-def soft_score(members: list[Candidate], w: SoftWeights) -> float:
-    """팀 하나의 소프트 조화도 점수 0..100 (Σwₖsₖ/Σwₖ)."""
+# ── 태그 ────────────────────────────────────────────────────────────
+def tag_kind(tag: str, majors: set | None = None) -> str | None:
+    """태그 어휘: role | dev | year | major | leader | trait. 모르는 태그는 None."""
+    t = tag.strip()
+    if t in ROLES:
+        return "role"
+    if t == "개발":
+        return "dev"
+    if _YEAR_RE.match(t):
+        return "year"
+    if t == "리더":
+        return "leader"
+    if t in ("pace", "prep", "lead", "comm"):
+        return "trait"
+    if majors is not None and t in majors:
+        return "major"
+    return None
+
+
+def has_tag(c, tag: str) -> bool:
+    t = tag.strip()
+    roles = list(c.roles or [])
+    if t in roles:
+        return True
+    if t == "개발":
+        return any(r in DEV_ROLES for r in roles)
+    m = _YEAR_RE.match(t)
+    if m:
+        return int(c.year or 0) == int(m.group(1))
+    if t == "리더":
+        return int((c.traits or {}).get("lead") or 0) >= LEAD_HIGH
+    if t in ("pace", "prep", "lead", "comm"):
+        return int((c.traits or {}).get(t) or 0) >= 4
+    return c.major == t
+
+
+_has_tag = has_tag   # 이전 이름 호환
+
+
+def spread_caps(candidates, hard: HardRules, team_count: int) -> dict:
+    """spread_tags 태그별 팀당 상한 = ceil(보유자 수 / 팀 수)."""
+    caps = {}
+    for t in hard.spread_tags or []:
+        n = sum(1 for c in candidates if has_tag(c, t))
+        caps[t] = max(1, math.ceil(n / max(1, team_count))) if n else 0
+    return caps
+
+
+# ── 점수 축 (0~1) ──────────────────────────────────────────────────
+def major_score(members, n_majors: int | None = None) -> float:
+    n = len(members)
+    if n <= 1:
+        return 1.0
+    distinct = len({m.major or "" for m in members})   # 학과 미입력(None)은 한 묶음으로
+    cap = min(n, n_majors) if n_majors else n
+    return min(1.0, distinct / cap)
+
+
+def _rank_value(k: int) -> float:
+    return RANK_VALUE[min(k, len(RANK_VALUE) - 1)]
+
+
+def best_roles(pref_lists) -> tuple[float, list]:
+    """팀원마다 서로 다른 역할 하나씩: 희망 점수 합 최대 배정 (비트마스크 DP).
+    반환: (합, [역할 이름 또는 None]) — None은 남는 역할이 없거나 희망 역할을 못 받은 사람."""
+    universe = list(ROLES)
+    for p in pref_lists:
+        for r in p:
+            if r not in universe:
+                universe.append(r)
+    pos = {r: i for i, r in enumerate(universe)}
+    vals = []
+    for p in pref_lists:
+        v = {}
+        for k, r in enumerate(p):
+            v.setdefault(pos[r], _rank_value(k))
+        vals.append(v)
+    n = len(vals)
+    memo: dict = {}
+
+    def go(i, mask):
+        if i == n:
+            return 0.0
+        key = (i, mask)
+        hit = memo.get(key)
+        if hit is not None:
+            return hit[0]
+        best_v, best_r = go(i + 1, mask), -1
+        for r, val in vals[i].items():
+            if not mask >> r & 1:
+                cand = val + go(i + 1, mask | 1 << r)
+                if cand > best_v + 1e-12:
+                    best_v, best_r = cand, r
+        memo[key] = (best_v, best_r)
+        return best_v
+
+    total = go(0, 0)
+    out, mask = [], 0
+    for i in range(n):
+        r = memo[(i, mask)][1]
+        out.append(universe[r] if r >= 0 else None)
+        if r >= 0:
+            mask |= 1 << r
+    return total, out
+
+
+def role_score(members) -> float:
     if not members:
         return 0.0
-    axes = {
-        # 하드로 같은 학과 상한을 다루므로, 소프트 전공축은 '다양성'으로 둔다.
-        "major": _major_score(members, same_major=False),
-        "role": _role_score(members),
-        "time": _time_score(members),
-        "trait": _trait_score(members),
-    }
-    weights = {"major": w.major, "role": w.role, "time": w.time, "trait": w.trait}
-    total = sum(weights.values()) or 1
-    return round(sum(axes[k] * weights[k] for k in axes) / total, 2)
+    total, _ = best_roles([tuple(m.roles or ()) for m in members])
+    return total / len(members)
 
 
-# ---- 하드 제약 위반 집계 ------------------------------------------------
-def _has_tag(c: Candidate, tag: str) -> bool:
-    """후보가 특정 태그/경험을 가졌는지. 역할 목록 또는 traits 키로 판단."""
-    if tag in c.roles:
-        return True
-    return bool(c.traits.get(tag))
+def common_slots(members) -> set:
+    it = iter(members)
+    first = next(it, None)
+    if first is None:
+        return set()
+    s = set(first.free_slots or ())
+    for m in it:
+        s &= set(m.free_slots or ())
+    return s
 
 
-def team_violations(team: list[Candidate], hard: HardRules) -> int:
-    """팀 하나가 어긴 하드 제약 개수."""
+def time_score(members) -> float:
+    return min(1.0, len(common_slots(members)) / TIME_TARGET_HOURS)
+
+
+def _similarity(vals) -> float:
+    vals = [v for v in vals if v]
+    if len(vals) < 2:
+        return NEUTRAL
+    return 1.0 - (max(vals) - min(vals)) / 4.0
+
+
+def trait_score(members) -> float:
+    parts = [_similarity([int((m.traits or {}).get(k) or 0) for m in members]) for k in TRAIT_KEYS]
+    leads = [int((m.traits or {}).get("lead") or 0) for m in members]
+    leads = [v for v in leads if v]
+    parts.append((1.0 if max(leads) >= LEAD_HIGH else 0.0) if leads else NEUTRAL)
+    return sum(parts) / len(parts)
+
+
+def subscores(members, n_majors: int | None = None) -> dict:
+    return {"major": major_score(members, n_majors), "role": role_score(members),
+            "time": time_score(members), "trait": trait_score(members)}
+
+
+def combine(sub: dict, w: SoftWeights) -> float:
+    tot = w.total()
+    if tot <= 0:
+        return 100.0
+    return 100.0 * (w.major * sub["major"] + w.role * sub["role"]
+                    + w.time * sub["time"] + w.trait * sub["trait"]) / tot
+
+
+def soft_score(members, w: SoftWeights, n_majors: int | None = None) -> float:
+    """팀 적합도 0~100."""
+    return combine(subscores(members, n_majors), w)
+
+
+# ── 하드 규칙 ──────────────────────────────────────────────────────
+def team_violations(members, hard: HardRules, caps: dict | None = None) -> int:
+    """팀 하나의 위반 건수. 고정 쌍은 짝이 다른 팀에 있으면 이 팀에서 1건(전체 집계는 쌍당 1건)."""
+    ids = {m.student_id for m in members}
     v = 0
-
-    # 1) 같은 학과 상한
-    if hard.same_major_max is not None:
-        counts: dict[str, int] = {}
-        for m in team:
-            if m.major:
-                counts[m.major] = counts.get(m.major, 0) + 1
-        v += sum(1 for n in counts.values() if n > hard.same_major_max)
-
-    ids = {m.student_id for m in team}
-
-    # 2) 분리 쌍: 둘 다 같은 팀에 있으면 위반
-    for a, b in hard.separate_pairs:
+    if hard.same_major_max:
+        for cnt in Counter(m.major for m in members if m.major).values():   # 미입력은 세지 않음
+            v += max(0, cnt - hard.same_major_max)
+    for tag, need in (hard.role_minimums or {}).items():
+        have = sum(1 for m in members if has_tag(m, tag))
+        v += max(0, int(need) - have)
+    for tag, cap in (caps or {}).items():
+        have = sum(1 for m in members if has_tag(m, tag))
+        v += max(0, have - cap)
+    for a, b in hard.separate_pairs or []:
         if a in ids and b in ids:
             v += 1
-
-    # 3) 고정 쌍: 한 명만 이 팀에 있으면(= 떨어졌으면) 위반 (쌍당 한 번만 세도록 a 기준)
-    for a, b in hard.fixed_pairs:
-        if (a in ids) ^ (b in ids):
+    for a, b in hard.fixed_pairs or []:
+        if (a in ids) != (b in ids):
             v += 1
-
-    # 4) 역할/경험 최소 보유 (예: 발표 1명 이상)
-    for tag, need in hard.role_minimums.items():
-        have = sum(1 for m in team if _has_tag(m, tag))
-        if have < need:
-            v += 1
-
     return v
 
 
-def total_violations(teams: list[list[Candidate]], hard: HardRules) -> int:
-    v = sum(team_violations(t, hard) for t in teams)
+def total_violations(teams, hard: HardRules) -> int:
+    members = [m for t in teams for m in t]
+    caps = spread_caps(members, hard, len(teams))
+    v = 0
+    for t in teams:
+        v += team_violations(t, hard, caps)
+    # 고정 쌍은 양쪽 팀에서 한 번씩 세었으므로 쌍당 1건으로 보정
+    where = {m.student_id: i for i, t in enumerate(teams) for m in t}
+    broken = sum(1 for a, b in hard.fixed_pairs or []
+                 if a in where and b in where and where[a] != where[b])
+    return v - broken
 
-    # 분산 태그: 특정 팀에만 몰리면 위반 (팀 수 대비 과밀 팀 1개당 1 위반)
-    for tag in hard.spread_tags:
-        holders = [sum(1 for m in t if _has_tag(m, tag)) for t in teams]
-        total_tag = sum(holders)
-        if total_tag and teams:
-            cap = -(-total_tag // len(teams))  # ceil: 팀당 허용 상한
-            v += sum(1 for h in holders if h > cap)
-    return v
 
-
-# ---- 목적함수 J ---------------------------------------------------------
 @dataclass
 class Objective:
-    j: float                 # 목적함수 값
-    avg_fit: float           # 평균 조화도
-    min_fit: float           # 최저 팀 점수
-    violations: int          # 하드 위반 총합
-    team_scores: list[float]  # 팀별 조화도
+    j: float
+    avg_fit: float
+    min_fit: float
+    violations: int
+    team_scores: list
 
 
-def objective(teams: list[list[Candidate]], w: SoftWeights, hard: HardRules) -> Objective:
-    """J = 평균 조화도 + 최저 팀 점수 − 1000 × 하드 위반."""
-    scores = [soft_score(t, w) for t in teams if t]
-    if not scores:
-        return Objective(j=0.0, avg_fit=0.0, min_fit=0.0, violations=0, team_scores=[])
-    avg = round(sum(scores) / len(scores), 2)
-    low = round(min(scores), 2)
+def objective(teams, w: SoftWeights, hard: HardRules, n_majors: int | None = None) -> Objective:
+    members = [m for t in teams for m in t]
+    if n_majors is None:
+        n_majors = len({m.major for m in members if m.major}) or None
+    scores = [soft_score(t, w, n_majors) for t in teams]
     viol = total_violations(teams, hard)
-    j = round(avg + low - HARD_PENALTY * viol, 2)
-    return Objective(j=j, avg_fit=avg, min_fit=low, violations=viol, team_scores=scores)
+    if not scores:
+        return Objective(0.0, 0.0, 0.0, viol, [])
+    avg, low = sum(scores) / len(scores), min(scores)
+    return Objective(avg + MAXIMIN_LAMBDA * low - HARD_PENALTY * viol, avg, low, viol, scores)
+
+
+def slot_label(day: int, block: int) -> str:
+    d = DAY_NAMES[day] if 0 <= day < len(DAY_NAMES) else str(day)
+    return f"{d} {9 + block:02d}–{10 + block:02d}시"
+
+
+def parse_slot(s: str) -> tuple[int, int]:
+    d, b = str(s).split("-")
+    return int(d), int(b)

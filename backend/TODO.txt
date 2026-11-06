@@ -31,8 +31,11 @@
 [백엔드 1] 담당 파일 — 사용자/수업/권한/결과저장:
    app/models.py              # 전체 ORM (스키마 소유자 역할)
    app/security.py            # 인증/권한 + 공용 소유확인(get_owned_class)
+   app/errors.py              # 공통 예외 처리 / 에러 응답 형식 통일
    app/routers/auth.py        # 회원/인증 API (가입·로그인·수정·탈퇴)
    app/routers/classes.py     # 과목/학생/명단/후보조회 API
+   tests/test_api_auth.py     # API 레벨 테스트(인증/권한/검증/에러형식)
+   SECURITY_CHECKLIST.md      # 보안 점검 체크리스트
    (매칭 결과 조회·팀 상세 API는 matching.py에 있으나 백엔드1 성격)
 
 [백엔드 2] 담당 파일 — 설문/매칭/AI 엔진:
@@ -134,28 +137,40 @@
    - 인증/권한 오류 수정
    - DB 최적화
    현재 상태:
-   [ ] 공통 예외 처리/에러 응답 형식 정리 필요
-   [ ] 자주 쓰는 조회에 인덱스/쿼리 점검(일부 인덱스는 schema에 있음)
+   [v] 공통 예외 처리/에러 응답 형식 통일 (app/errors.py)
+       -> HTTPException/검증오류/500 을 {"error":{code,message,detail,path}} 로 통일
+       -> 500 은 스택 로그만 남기고 민감정보 미노출
+   [v] 인덱스 보강: match_runs(class_id, created_at DESC) 복합 인덱스,
+       team_members(student_id) 인덱스 추가 (2개 스키마 반영)
+   [v] ORM 파라미터 바인딩으로 SQL 인젝션 방어(원시 SQL 없음)
 
 9) 백엔드 QA
    - API 테스트
    - 보안/권한 점검
-   - 성능 개선 
+   - 성능 개선
    현재 상태:
-   [v] 매칭 엔진 단위 테스트 있음 (tests/test_matching.py)
-   [v] pytest 실제 실행 검증 완료 -> 17개 전부 통과
-       (엔진/v2/가드 테스트, DB 불필요한 범위)
-   [v] 앱 import·엔드포인트 등록 확인(19개 라우트 정상 로드)
-   [ ] 전체 API 흐름(HTTP+DB) 테스트는 PostgreSQL 필요라 미실행
-       -> SQLite는 ARRAY 미지원이라 불가, 실제 DB로만 가능
-   [ ] 보안 점검(토큰 만료, 권한 우회 등) 체크리스트 필요
+   [v] 매칭 엔진 단위 테스트 (tests/test_matching.py)
+   [v] v2/가드 테스트 (test_engine_v2.py, test_match_guards.py)
+   [v] API 레벨 테스트 추가 (tests/test_api_auth.py):
+       인증없음->401, 잘못된입력->422, 에러응답 통일형식 검증
+   [v] pytest 전체 23개 통과 (DB 불필요 범위)
+   [v] 보안 점검 체크리스트 작성 (SECURITY_CHECKLIST.md)
+   [!] 전체 API 흐름(HTTP+DB) 테스트는 여전히 PostgreSQL 필요
+       -> 이제 Docker(PR#5)로 DB를 띄울 수 있으니 docker compose up 후
+          Swagger/통합테스트로 확인 가능 (본 에이전트는 Docker 미실행이라 미검증)
 
 10) 서버 최종 배포
     - DB/서버 점검
     - 운영 환경 설정
     현재 상태:
-    [ ] 배포 설정 없음 (Dockerfile/compose, 운영용 .env, 호스팅 선택 등)
-    [ ] 운영 DB 연결 및 마이그레이션 전략 필요
+    [v] 배포 설정 — Docker/Compose 추가 (PR #5, 작성자 LetsCubeSpin)
+        -> backend/Dockerfile(python:3.13-slim), docker-compose.yaml
+        -> PostgreSQL(15-alpine) + 백엔드 컨테이너, healthcheck/depends_on
+        -> DATABASE_URL 에 psycopg v3 드라이버 명시
+        ※ 이 에이전트 세션 외부(팀원)의 PR. merge 여부는 저장소에서 확인.
+    [v] .gitignore 추가 (루트) — 캐시/.env/담당사본 제외
+    [~] 운영 DB 마이그레이션 전략 — 스키마는 schema.sql 수동 로드 방식.
+        (Alembic 등 도입은 선택사항, 과제 범위상 보류)
 
 
 ------------------------------------------------------------

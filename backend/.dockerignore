@@ -7,3 +7,7 @@ venv/
 .pytest_cache/
 .git/
 .gitignore
+# 비밀값(.env)이 이미지에 들어가지 않게
+.env
+.env.*
+!.env.example
