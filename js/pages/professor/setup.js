@@ -4,10 +4,12 @@ const WEIGHTS = [["major", "전공 다양성"], ["role", "역할 역량 균형"]
 const SURVEY = { "개발 프로젝트": ["희망 역할 순위", "보유 기술·도구", "협업 성향 4문항", "주간 가용 시간", "자기소개"], "기획·마케팅 프로젝트": ["희망 역할 순위", "경험 분야·도구", "협업 성향 4문항", "주간 가용 시간", "자기소개"],
   "학술 세미나": ["희망 역할 순위", "관심 주제·방법론", "협업 성향 4문항", "주간 가용 시간", "자기소개"], "공모전·해커톤": ["희망 역할 순위", "보유 기술·도구", "협업 성향 4문항", "주간 가용 시간", "자기소개"] };
 
-function loadingCard(n) {
+function loadingCard(n, server) {
+  const steps = server ? ["사전 점검 (후보·제약 실현 가능성)", "메모 해석 (자연어 → 조건)", "희소 태그 우선 초기 배치", "2-교환 국소 탐색", "담금질(SA)로 지역 최적 탈출", "3회 시작 중 최고 해 선택"]
+    : ["제출 응답 정리", "요구사항 키워드 해석", "그리디 초기 배정", "2-교환 지역 탐색으로 개선 (5회 재시작)", "제약 검증과 조화도 계산"];
   return el(`<div class="card card-pad page" role="status" aria-live="polite"><div class="loading-wrap"><div class="pulse" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.8 4.3L18 9l-4.2 1.7L12 15l-1.8-4.3L6 9l4.2-1.7z"/></svg></div>
     <h3 style="font-size:19px">팀 조합을 계산하고 있습니다</h3><p class="card-sub" style="margin-top:8px">${n}명의 응답을 기준으로 조건에 가장 잘 맞는 조합을 찾습니다</p>
-    <ul class="load-steps"><li>· 제출 응답 정리</li><li>· 요구사항 키워드 해석</li><li>· 그리디 초기 배정</li><li>· 2-교환 지역 탐색으로 개선 (5회 재시작)</li><li>· 제약 검증과 조화도 계산</li></ul></div></div>`);
+    <ul class="load-steps">${steps.map(s => `<li>· ${esc(s)}</li>`).join("")}</ul>${server ? `<p class="sm muted" style="margin-top:10px">서버 AI 엔진(TeamFit)으로 계산 중</p>` : ""}</div></div>`);
 }
 
 /** 편성 실행 — 설정 화면과 결과 화면(다시 실행)이 공용으로 쓴다 */
@@ -26,13 +28,44 @@ async function runMatching(cls, opts = {}) {
   S.touched = true; S.seed = (S.seed || 0) + 1;
   const keep = cls.result && !cls.result.confirmedAt ? cls.result.teams.filter(t => t.locked) : [];
   const locked = keep.map(t => ({ no: t.no, members: t.members.map(m => people.find(p => p.id === m.id) || m) }));
-  const c = $("#content"); c.innerHTML = ""; c.append(loadingCard(people.length));
+  // 고정한 팀이 있으면 서버 엔진(고정 기능 없음) 대신 로컬 계산을 쓴다
+  const useServer = EngineAPI.mode() === "server" && !locked.length;
+  const c = $("#content"); c.innerHTML = ""; c.append(loadingCard(people.length, useServer));
   const lis = $$(".load-steps li", c); lis.forEach((li, i) => setTimeout(() => li.classList.add("on"), i * 240));
-  await new Promise(r => setTimeout(r, lis.length * 240 + 100));
-  const res = TM.solve(people.map(p => ({ ...p })), S, { seed: S.seed, locked });
-  cls.result = { seed: S.seed, createdAt: new Date().toISOString(), confirmedAt: null, settings: JSON.parse(JSON.stringify(S)),
-    teams: res.teams.map(t => ({ no: t.no, locked: !!t.locked, members: t.members.map(memberSnapshot) })) };
-  markSaved(); toast(`편성을 완료했습니다 (시드 #${S.seed}). 결과를 검토하세요.`); nav("result/" + cls.id);
+  const anim = new Promise(r => setTimeout(r, lis.length * 240 + 100));
+
+  let teams = null, engine = null, fellBack = "";
+  if (useServer) {
+    const t0 = performance.now();
+    try {
+      const data = await EngineAPI.solve(people, S, S.seed); await anim;
+      if (!data.feasible) { // 사전 점검 불가: 결과를 만들지 않고 이유를 알려 준다
+        const bad = (data.precheck.items || []).filter(i => !i.ok);
+        await confirmDialog({ title: "현재 조건으로는 편성할 수 없습니다", okText: "확인",
+          message: bad.map(i => `· ${i.name}: ${i.detail}${i.suggestion ? `\n   → ${i.suggestion}` : ""}`).join("\n") || "사전 점검을 통과하지 못했습니다." });
+        S.seed -= 1; return renderRoute();
+      }
+      engine = EngineAPI.summarize(data, Math.round(performance.now() - t0));
+      const byId = new Map(people.map(p => [String(p.id), p]));
+      teams = engine.teams.map(t => t.ids.map(id => byId.get(String(id))).filter(Boolean));
+      if (teams.reduce((s, t) => s + t.length, 0) !== people.length) throw new EngineAPI.EngineUnavailable("응답의 인원이 맞지 않음");
+    } catch (e) {
+      if (!(e instanceof EngineAPI.EngineUnavailable)) throw e;
+      teams = null; engine = null; fellBack = e.message;
+    }
+  }
+  if (!teams) {
+    await anim;
+    const res = TM.solve(people.map(p => ({ ...p })), S, { seed: S.seed, locked });
+    cls.result = { seed: S.seed, createdAt: new Date().toISOString(), confirmedAt: null, settings: JSON.parse(JSON.stringify(S)),
+      teams: res.teams.map(t => ({ no: t.no, locked: !!t.locked, members: t.members.map(memberSnapshot) })) };
+  } else {
+    cls.result = { seed: S.seed, createdAt: new Date().toISOString(), confirmedAt: null, settings: JSON.parse(JSON.stringify(S)),
+      teams: teams.map((t, i) => ({ no: i + 1, locked: false, members: t.map(memberSnapshot) })), engine };
+  }
+  markSaved();
+  toast(`편성을 완료했습니다 (시드 #${S.seed}). ${engine ? "서버 AI 엔진 결과입니다. " : fellBack ? `서버 연결 실패(${fellBack}) — 로컬 계산으로 대체했습니다. ` : ""}결과를 검토하세요.`);
+  nav("result/" + cls.id);
 }
 
 function renderSetup(c, arg) {
@@ -115,7 +148,7 @@ function renderSetup(c, arg) {
   /* ---- 요구사항 ---- */
   const nc = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">주관식 요구사항</h3><p class="card-sub">문장에서 조건을 뽑아 편성에 반영하고 결과에서 검증합니다</p></div></div>
     <label class="sr" for="stNote">요구사항</label><textarea class="textarea" id="stNote" maxlength="500" style="min-height:120px">${esc(S.note)}</textarea>
-    <p class="help"><span id="nl">${S.note.length}</span>/500</p><div class="mt-16"><b style="font-size:13.5px;color:var(--navy-soft)">해석된 조건</b></div><div id="pc"></div>
+    <p class="help"><span id="nl">${S.note.length}</span>/500</p><p class="help">서버 AI 엔진으로 실행하면 이 메모를 서버가 직접 해석하므로 아래 체크 해제는 적용되지 않습니다. 편입생 분산과 팀 고정은 서버 엔진이 지원하지 않습니다(고정한 팀이 있으면 로컬 계산을 사용).</p><div class="mt-16"><b style="font-size:13.5px;color:var(--navy-soft)">해석된 조건</b></div><div id="pc"></div>
     <p class="help">데모 해석기는 <b>‘발표’, ‘개발/코딩/구현’, ‘디자인/UI/UX’, ‘N학년 … 몰리지/분산/최대/이하’</b> 키워드만 인식합니다. 실제 서비스에서는 LLM이 대신하며, 해석 결과는 이 화면에서 직접 확인하게 됩니다.</p></div>`);
   const drawParsed = () => { const box = $("#pc", nc); box.innerHTML = ""; const conds = TM.parseNote(S.note);
     if (!conds.length) return box.append(el(`<p class="sm muted mt-8">${S.note.trim() ? "인식된 조건이 없습니다. 위 키워드를 포함해 다시 써 보세요." : "요구사항을 입력하면 해석 결과가 여기에 표시됩니다."}</p>`));
