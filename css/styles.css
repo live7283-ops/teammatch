@@ -641,3 +641,6 @@ dialog#dlg::backdrop{background:rgba(15,23,42,.45)}
 .bullets{margin:0 0 16px; padding-left:18px; color:var(--text-2); font-size:13.5px; line-height:1.75}
 .bullets b{color:var(--navy)}
 .dlg-req{display:block; margin:16px 0 6px; font-size:13px; color:var(--text-2)}
+
+.issue-list .lv.ok{background:var(--mint-050); color:var(--mint)}
+.eng-note{border-top:1px dashed var(--line); padding-top:8px}
