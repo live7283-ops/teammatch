@@ -1,6 +1,7 @@
 """매칭 엔진 v2 라우터 (TeamFit AI).
 
 엔드포인트
+  GET  /api/classes/{id}/conditions : 이 수업에서 고를 수 있는 편성 조건 목록 (조건 카탈로그)
   POST /api/classes/{id}/precheck   : 실행 전 점검 (사진 4)
   POST /api/classes/{id}/match-v2   : J 최적화 실행 + 지표/추이 (사진 5~10)
 
@@ -12,11 +13,12 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..engine import nl_rules
+from ..engine.catalog import catalog
 from ..engine.constraints import HardRules, SoftWeights, objective
 from ..engine.optimizer import optimize
 from ..engine.precheck import precheck
@@ -46,6 +48,8 @@ def _build_hard(body: MatchV2Request, note_hard: HardRules | None) -> HardRules:
         fixed_pairs=[tuple(p) for p in body.hard.fixed_pairs],
         spread_tags=list(body.hard.spread_tags),
         role_minimums=dict(body.hard.role_minimums),
+        min_common_hours=body.hard.min_common_hours,
+        priority=list(body.hard.priority),
     )
     if note_hard:
         for tag, need in note_hard.role_minimums.items():
@@ -64,7 +68,22 @@ def _hard_to_detail(hard: HardRules) -> dict:
         "fixed_pairs": [list(p) for p in hard.fixed_pairs],
         "spread_tags": list(hard.spread_tags),
         "role_minimums": dict(hard.role_minimums),
+        "min_common_hours": hard.min_common_hours,
+        "priority": list(hard.priority),
     }
+
+
+@router.get("/classes/{class_id}/conditions")
+def list_conditions(
+    class_id: uuid.UUID,
+    team_size: int = Query(default=4, ge=2, le=8),
+    prof: User = Depends(require_professor),
+    db: Session = Depends(get_db),
+) -> dict:
+    """이 수업의 설문 응답에서 만들 수 있는 편성 조건 틀과 빈칸 값(조건 추가 메뉴용)."""
+    get_owned_class(db, class_id, prof)
+    candidates, _ = _load_candidates(db, class_id)
+    return catalog(candidates, team_size)
 
 
 @router.post("/classes/{class_id}/precheck", response_model=PrecheckOut)
@@ -85,7 +104,8 @@ def run_precheck(
         feasible=result.feasible,
         team_count=result.team_count,
         composition=result.composition,
-        items=[CheckItemOut(name=i.name, ok=i.ok, detail=i.detail, suggestion=i.suggestion)
+        items=[CheckItemOut(name=i.name, ok=i.ok, detail=i.detail, suggestion=i.suggestion,
+                            rule_id=i.rule_id, fix=i.fix)
                for i in result.items],
     )
 
@@ -181,4 +201,5 @@ def run_match_v2(
         parsed_rules=[ParsedRuleOut(source=r.source, kind=r.kind,
                                     description=r.description, applied=r.applied)
                       for r in parsed.rules],
+        conditions=(getattr(sol, "details", None) or {}).get("conditions") or [],
     )

@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 
 from .constraints import (HARD_PENALTY, LEAD_HIGH, MAXIMIN_LAMBDA, HardRules, SoftWeights, best_roles,
-                          has_tag, parse_slot, slot_label)
+                          has_tag, parse_slot, priority_order, slot_label)
 from .scoring import Evaluator
 
 SHORT_HOURS = 3        # 공통 시간이 주 3시간 미만이면 경고
@@ -34,6 +34,9 @@ def rules_of(hard: HardRules, names: dict | None = None) -> list[dict]:
             out.append({"rule_id": f"role_min:{t}", "kind": "role_min", "label": f"각 팀 '{t}' {need}명 이상"})
     for t in hard.spread_tags or []:
         out.append({"rule_id": f"spread:{t}", "kind": "spread", "label": f"'{t}' 팀마다 고르게"})
+    if hard.min_common_hours:
+        out.append({"rule_id": "min_common_hours", "kind": "min_common_hours",
+                    "label": f"공통 가능 시간 주 {hard.min_common_hours}시간 이상"})
     for k, (a, b) in enumerate(hard.separate_pairs or []):
         out.append({"rule_id": f"separate:{k}", "kind": "separate", "label": f"분리: {nm(a)} · {nm(b)}"})
     for k, (a, b) in enumerate(hard.fixed_pairs or []):
@@ -61,6 +64,8 @@ def _team_rule_hits(ev: Evaluator, team: list[int], hard: HardRules) -> dict:
         have = sum(1 for i in team if flag[i])
         if have > cap:
             hits[f"spread:{t}"] = have - cap
+    if hard.min_common_hours and team and bin(ev.common_mask(team)).count("1") < int(hard.min_common_hours):
+        hits["min_common_hours"] = 1
     for k, (a, b) in enumerate(hard.separate_pairs or []):
         if ev.idx.get(a) in s and ev.idx.get(b) in s:
             hits[f"separate:{k}"] = 1
@@ -118,7 +123,11 @@ def explain_team(ev: Evaluator, team: list[int], target_size: int | None = None)
 def _details(ev: Evaluator, teams_idx: list[list[int]], hard: HardRules, target_size: int | None = None) -> dict:
     names = {c.student_id: c.name for c in ev.cands}
     rules = rules_of(hard, names)
-    per_team, scores, hards = [], [], []
+    order = priority_order(hard)
+    if order:   # 우선순위가 있으면 conditions 를 그 순서로 (목록에 없는 조건이 맨 앞 = 양보하지 않는 조건)
+        rank = {r: k for k, r in enumerate(order)}
+        rules.sort(key=lambda r: rank.get(r["rule_id"], -1))
+    per_team, scores, hards, costs = [], [], [], []
     team_hits = []
     for t in teams_idx:
         info = explain_team(ev, t, target_size)
@@ -129,20 +138,24 @@ def _details(ev: Evaluator, teams_idx: list[list[int]], hard: HardRules, target_
         f, h = ev.team(t)
         scores.append(f)
         hards.append(h)
+        costs.append(ev.scored(t)[1])
     conditions = []
     for r in rules:
         idx = [ti for ti, h in enumerate(team_hits) if r["rule_id"] in h]
         cnt = sum(team_hits[ti][r["rule_id"]] for ti in idx)
         if r["kind"] == "fixed":
             cnt = 1 if idx else 0          # 쌍 하나는 위반 1건
-        conditions.append({**r, "satisfied": not idx, "violations": cnt, "team_indexes": idx})
+        conditions.append({**r, "satisfied": not idx, "violations": cnt, "team_indexes": idx,
+                           # 우선순위(1이 가장 높음). 우선순위를 안 썼거나 목록에 없는 조건은 None
+                           "priority": order.index(r["rule_id"]) + 1 if r["rule_id"] in order else None})
     viol = int(round(sum(hards)))
+    cost = round(sum(costs), 6) if ev.weighted else viol
     avg = sum(scores) / len(scores) if scores else 0.0
     low = min(scores) if scores else 0.0
     lowest = scores.index(low) if scores else -1
     for ti, info in enumerate(per_team):
         info["is_lowest"] = ti == lowest
-    return {"objective_j": round(avg + MAXIMIN_LAMBDA * low - HARD_PENALTY * viol, 2),
+    return {"objective_j": round(avg + MAXIMIN_LAMBDA * low - HARD_PENALTY * cost, 2),
             "avg_fit": round(avg, 1), "min_fit": round(low, 1), "hard_violations": viol,
             "teams": per_team, "conditions": conditions}
 
@@ -193,6 +206,8 @@ def hard_from_detail(detail: dict | None) -> HardRules:
         fixed_pairs=[tuple(p) for p in d.get("fixed_pairs") or []],
         spread_tags=list(d.get("spread_tags") or []),
         role_minimums={k: int(v) for k, v in (d.get("role_minimums") or {}).items()},
+        min_common_hours=d.get("min_common_hours"),
+        priority=list(d.get("priority") or []),
     )
 
 
