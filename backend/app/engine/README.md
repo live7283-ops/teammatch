@@ -14,6 +14,7 @@
 | `explain.py` | 팀 카드 값(하위 점수·공통 시간·요약·경고·위반·역할 배정), 조건 충족 표, `evaluate` |
 | `nl_rules.py` | 교수 메모 해석 — 규칙 기반 (팀원 작성), LLM 설정이 있으면 `llm_rules`를 먼저 사용 |
 | `llm_rules.py` | 교수 메모 LLM 해석기: 프롬프트, 응답 검증, 캐시, anthropic/openai 호출 |
+| `catalog.py` | 조건 카탈로그 `catalog(candidates, team_size)` — 화면의 "조건 추가" 메뉴용 |
 
 ## 라우터와의 계약 (바뀌지 않음)
 
@@ -28,6 +29,56 @@ v1.1에서 늘어난 것 (모두 기본값이 있어 기존 호출부는 그대�
 - `CheckItem.fix`, `PrecheckResult.sizes`
 - `Solution.seed`, `.elapsed_ms`, `.alternatives`, `.details`
 - `evaluate(candidates, teams, weights, hard, team_size=None)`, `EvaluateError(code, message, items)`
+
+## 조건 우선순위 · 공통 시간 조건 · 조건 카탈로그 (11월 추가)
+
+가중치 숫자 대신 "조건 목록 + 우선순위"로 편성을 설정할 수 있게 하는 부분입니다. 모두 선택 항목이라 기존 요청은 그대로 동작하고, 우선순위를 쓰지 않으면 같은 seed에서 이전과 같은 팀이 나옵니다.
+
+**조건 id (`rule_id`)** — `priority`, 결과의 `conditions`, 사전 점검 `items`가 같은 id를 씁니다.
+
+| 조건 | rule_id | `hard`에 넣는 자리 |
+| --- | --- | --- |
+| 같은 학과 팀당 최대 N명 | `same_major_max` | `same_major_max` |
+| 각 팀에 태그 보유자 N명 이상 | `role_min:{태그}` | `role_minimums.{태그}` |
+| 태그 보유자를 팀마다 고르게 | `spread:{태그}` | `spread_tags[]` |
+| 공통 가능 시간 주 N시간 이상 | `min_common_hours` | `min_common_hours` |
+| 두 학생 다른 팀 / 같은 팀 | `separate:{순번}` / `fixed:{순번}` | `separate_pairs[]` / `fixed_pairs[]` |
+
+**우선순위 (`HardRules.priority`)** — rule_id 목록, 앞이 1순위.
+
+- 뜻: 모든 조건을 지킬 수 있으면 전부 지키고, 지킬 수 없을 때만 뒤 순위부터 양보합니다.
+- 구현: 위반 벌점에 순위 배수를 곱합니다. 맨 아래 순위가 1, 한 단계 위마다 10배(`PRIORITY_RATIO`). 목록에 없는 조건(예: 메모에서 해석된 조건)은 1순위보다 위라서 양보하지 않습니다.
+- 엄밀한 사전식 순서는 아닙니다. 아래 순위 위반을 10건 넘게 없앨 수 있으면 바로 위 순위 1건을 내줄 수 있습니다.
+- `hard_violations`는 배수와 무관한 위반 건수이고, `objective_j`에는 배수가 곱해집니다.
+- `conditions[]`는 우선순위 순서로 오고 항목마다 `priority`(1부터, 없으면 null)가 붙습니다.
+
+**공통 시간 조건 (`min_common_hours`)** — 팀원 전원이 가능한 칸(1칸 = 1시간)이 N개 미만인 팀마다 위반 1건.
+
+- 사전 점검은 "가능 시간이 N시간 미만인 학생이 있는가"만 바로 판정합니다(그 학생의 팀은 지킬 수 없음).
+- 팀별로 실제로 겹치는지는 편성해 봐야 알 수 있어 `conditions`에서 확인합니다.
+- 기준이 높아 다 지킬 수 없으면, 못 지킨 팀의 공통 시간이 많이 낮아질 수 있습니다(위반 1건은 몇 시간이 모자라든 같은 벌점).
+
+**조건 카탈로그** — `catalog(candidates, team_size)`, `GET /api/classes/{id}/conditions?team_size=4`
+
+```jsonc
+{
+  "team_count": 11, "sizes": [5, 4, 4, ...],
+  "conditions": [
+    {"kind": "role_min", "rule_id": "role_min:{tag}", "path": "hard.role_minimums.{tag}",
+     "text": "각 팀에 {tag} {count}명 이상", "check": "instant",
+     "params": [{"name": "tag", "type": "tag",
+                 "options": [{"value": "개발", "label": "개발 가능자 (…)", "group": "role", "holders": 40, "max": 3}]},
+                {"name": "count", "type": "int", "min": 1, "default": 1}]},
+    {"kind": "min_common_hours", "text": "공통 가능 시간 주 {hours}시간 이상", "check": "after_run", ...}
+  ],
+  "always_on": [{"key": "major", "label": "전공을 고르게 섞기", "weight": 4}, ...],
+  "unsupported": [{"label": "유학생·외국인·편입생 조건", "reason": "설문과 학적 정보에 해당 항목이 없습니다."}]
+}
+```
+
+- `check`: `instant`는 사전 점검이 실행 전에 바로 판정하는 조건, `after_run`은 편성 뒤에 알 수 있는 조건입니다.
+- `options[].max`는 그 태그로 "각 팀 N명 이상"을 걸 수 있는 최대 N입니다(0이면 선택 불가).
+- 사전 점검 `items[]`에는 `rule_id`가 붙어, 화면이 어느 조건 줄에 빨간 표시를 할지 알 수 있습니다. `fix`는 버튼으로 바로 적용할 수정안입니다.
 
 ## 라우터에 붙이는 법 (백엔드 2 참고용)
 
@@ -77,5 +128,5 @@ except EvaluateError as e:
 ## 테스트
 
 ```bash
-cd backend && python -m pytest -q tests/test_engine_port.py
+cd backend && python -m pytest -q tests/test_engine_port.py tests/test_priority_conditions.py
 ```

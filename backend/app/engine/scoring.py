@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections import Counter
 
 from .constraints import (HARD_PENALTY, LEAD_HIGH, MAXIMIN_LAMBDA, NEUTRAL, RANK_VALUE, ROLES, TIME_TARGET_HOURS,
-                          TRAIT_KEYS, HardRules, SoftWeights, has_tag, spread_caps)
+                          TRAIT_KEYS, HardRules, SoftWeights, has_tag, rule_weights, spread_caps)
 
 
 class Evaluator:
@@ -66,6 +66,21 @@ class Evaluator:
             if a in self.idx and b in self.idx and a != b:
                 self.fix[self.idx[a]].add(self.idx[b])
                 self.fix[self.idx[b]].add(self.idx[a])
+        self.min_hours = int(hard.min_common_hours or 0)
+        # 조건 우선순위 → 조건별 벌점 배수. 우선순위가 없으면 전부 1이라 cost == count (이전 동작 그대로).
+        rw = rule_weights(hard)
+        self.weighted = any(v != 1.0 for v in rw.values())
+        self.w_major_cap = rw.get("same_major_max", 1.0)
+        self.w_min = [rw.get(f"role_min:{t}", 1.0) for t, _, _ in self.min_rules]
+        self.w_spread = [rw.get(f"spread:{t}", 1.0) for t, _, _ in self.spread_rules]
+        self.w_hours = rw.get("min_common_hours", 1.0)
+        self.w_pair: dict = {}                       # (i, j) → 그 쌍 조건의 배수 (분리·고정 공용, 겹치면 큰 값)
+        for kind, pairs in (("separate", hard.separate_pairs or []), ("fixed", hard.fixed_pairs or [])):
+            for k, (a, b) in enumerate(pairs):
+                if a in self.idx and b in self.idx and a != b:
+                    i, j, w = self.idx[a], self.idx[b], rw.get(f"{kind}:{k}", 1.0)
+                    key = (kind, min(i, j), max(i, j))
+                    self.w_pair[key] = max(w, self.w_pair.get(key, 0.0))
         self.wsum = weights.total()
         self._cache: dict = {}
         self.n_evals = 0
@@ -125,39 +140,62 @@ class Evaluator:
         return 100.0 * (w.major * sub["major"] + w.role * sub["role"]
                         + w.time * sub["time"] + w.trait * sub["trait"]) / self.wsum
 
-    def hard_count(self, team) -> float:
-        """팀 위반 건수. 고정 쌍은 깨진 쪽마다 0.5 → 전체 합이 쌍당 1건."""
-        h = 0.0
+    def _hard(self, team) -> tuple[float, float]:
+        """(위반 건수, 우선순위 배수를 곱한 벌점). 고정 쌍은 깨진 쪽마다 0.5 → 전체 합이 쌍당 1건."""
+        h = c = 0.0
         cap = self.hard.same_major_max
         if cap:
             for cnt in Counter(self.major[i] for i in team if self.major[i] != self.unknown_major).values():
                 if cnt > cap:
                     h += cnt - cap
-        for _, need, flag in self.min_rules:
+                    c += (cnt - cap) * self.w_major_cap
+        for (_, need, flag), w in zip(self.min_rules, self.w_min):
             have = sum(1 for i in team if flag[i])
             if have < need:
                 h += need - have
-        for _, c, flag in self.spread_rules:
+                c += (need - have) * w
+        for (_, limit, flag), w in zip(self.spread_rules, self.w_spread):
             have = sum(1 for i in team if flag[i])
-            if have > c:
-                h += have - c
+            if have > limit:
+                h += have - limit
+                c += (have - limit) * w
+        if self.min_hours and team and bin(self.common_mask(team)).count("1") < self.min_hours:
+            h += 1
+            c += self.w_hours
         s = set(team)
         for i in team:
             if self.sep[i]:
-                h += 0.5 * len(self.sep[i] & s)
+                for j in self.sep[i] & s:
+                    h += 0.5
+                    c += 0.5 * self.w_pair[("separate", min(i, j), max(i, j))]
             if self.fix[i]:
-                h += 0.5 * len(self.fix[i] - s)
-        return h
+                for j in self.fix[i] - s:
+                    h += 0.5
+                    c += 0.5 * self.w_pair[("fixed", min(i, j), max(i, j))]
+        return h, c
 
-    def team(self, team) -> tuple[float, float]:
-        """(fit 0~100, 위반 건수). team은 인덱스 묶음."""
+    def hard_count(self, team) -> float:
+        """팀 위반 건수."""
+        return self._hard(team)[0]
+
+    def _entry(self, team) -> tuple[float, float, float]:
         key = tuple(sorted(team))
         hit = self._cache.get(key)
         if hit is None:
             self.n_evals += 1
-            hit = (self.fit(self.sub(key)), self.hard_count(key)) if key else (0.0, 0.0)
+            hit = (self.fit(self.sub(key)), *self._hard(key)) if key else (0.0, 0.0, 0.0)
             self._cache[key] = hit
         return hit
+
+    def team(self, team) -> tuple[float, float]:
+        """(fit 0~100, 위반 건수). team은 인덱스 묶음."""
+        f, h, _ = self._entry(team)
+        return f, h
+
+    def scored(self, team) -> tuple[float, float]:
+        """(fit 0~100, 벌점 단위). optimizer 가 쓴다. 우선순위가 없으면 team() 과 같은 값."""
+        f, _, c = self._entry(team)
+        return f, c
 
     # ── 목적함수 ──
     @staticmethod
