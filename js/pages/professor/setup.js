@@ -1,6 +1,5 @@
-/* 편성 설정 — 수업마다 독립된 설정(cls.setup). 프리셋은 교수 계정 전체에서 공유한다.
+/* 편성 설정 — 수업마다 독립된 설정(cls.setup). 상단 '내 설정 보관함'에서 교수 계정에 저장해 둔 설정을 다른 수업으로 불러올 수 있다. 가중치는 교수가 조절하지 않는다 — 제작팀 고정값(TM.DEFAULT_WEIGHTS)을 모든 수업에 일괄 적용한다.
    "AI 해석" 영역은 키워드 해석(데모)이며, 해석된 조건은 실제로 편성 알고리즘에 반영·검증된다. */
-const WEIGHTS = [["major", "전공 다양성"], ["role", "역할 역량 균형"], ["time", "일정 호환성"], ["trait", "성향 호환성"]];
 const SURVEY = { "개발 프로젝트": ["희망 역할 순위", "보유 기술·도구", "협업 성향 4문항", "주간 가용 시간", "자기소개"], "기획·마케팅 프로젝트": ["희망 역할 순위", "경험 분야·도구", "협업 성향 4문항", "주간 가용 시간", "자기소개"],
   "학술 세미나": ["희망 역할 순위", "관심 주제·방법론", "협업 성향 4문항", "주간 가용 시간", "자기소개"], "공모전·해커톤": ["희망 역할 순위", "보유 기술·도구", "협업 성향 4문항", "주간 가용 시간", "자기소개"] };
 
@@ -26,6 +25,7 @@ async function runMatching(cls, opts = {}) {
   if (!deadlineText(cls.deadline).past && stats.pending > 0 && !opts.rerun &&
     !await confirmDialog({ title: "설문 마감 전입니다", message: `미제출 ${stats.pending}명이 있습니다. 지금 실행하면 이들은 ${S.miss === "exclude" ? "제외됩니다" : "기본값(학과·학년)으로 배정됩니다"}.`, okText: "그래도 실행" })) return;
   S.touched = true; S.seed = (S.seed || 0) + 1;
+  S.weights = { ...TM.DEFAULT_WEIGHTS }; // 저장된 값이 무엇이든 실행에는 제작팀 고정 가중치만 쓴다
   const keep = cls.result && !cls.result.confirmedAt ? cls.result.teams.filter(t => t.locked) : [];
   const locked = keep.map(t => ({ no: t.no, members: t.members.map(m => people.find(p => p.id === m.id) || m) }));
   // 고정한 팀이 있으면 서버 엔진(고정 기능 없음) 대신 로컬 계산을 쓴다
@@ -68,40 +68,73 @@ async function runMatching(cls, opts = {}) {
   nav("result/" + cls.id);
 }
 
+/* ---------- 내 설정 보관함: 저장한 편성 설정을 다른 수업에서 불러오기 ----------
+   저장 대상은 팀 구성 · 하드 제약 · 주관식 요구사항 (고정/분리 쌍은 수업마다 학생이 달라 제외). 로직은 TM.snapshotSetup/applySetupSnapshot, 저장소는 store.js의 saveSetupToLibrary. */
+let svSelected = null; // 직전에 저장·선택한 항목 (화면을 다시 그려도 유지)
+function setupLibraryCard(cls) {
+  const S = cls.setup, list = savedSetups(), a = me();
+  if (!list.some(x => x.id === svSelected)) svSelected = list[0] ? list[0].id : null;
+  const card = el(`<div class="card card-pad" id="svCard"><div class="card-head"><div><h3 class="card-title">내 설정 보관함</h3>
+    <p class="card-sub">팀 구성·하드 제약·주관식 요구사항을 이름 붙여 저장해 두고, 다른 수업에서 불러와 그대로 쓸 수 있습니다.</p></div>
+    <span class="tag tag-grey">${list.length}/${MAX_SAVED_SETUPS}</span></div>
+    <div id="svLoadBox"></div>
+    <form class="mt-16" id="svForm" novalidate><div class="field" style="margin-bottom:0"><label for="svName">현재 수업(${esc(cls.name)})의 설정을 저장</label>
+      <div class="flex" style="flex-wrap:nowrap"><input class="input" id="svName" maxlength="${SAVED_SETUP_NAME_MAX}" placeholder="예: 캡스톤 기본 설정" autocomplete="off" style="flex:1;min-width:0">
+      <button class="btn btn-ghost" id="svSave" type="submit">저장</button></div>
+      <p class="help">고정·분리로 지정한 학생 쌍은 수업마다 학생이 달라 저장하지 않습니다. 같은 이름으로 저장하면 덮어씁니다.</p></div></form></div>`);
+
+  const box = $("#svLoadBox", card);
+  if (!list.length) box.append(el(`<p class="sm muted">저장해 둔 설정이 없습니다. 아래 조건을 정한 뒤 이름을 붙여 저장하면 다른 수업에서 불러올 수 있습니다.</p>`));
+  else {
+    box.append(el(`<div class="field" style="margin-bottom:0"><label for="svPick">저장한 설정 불러오기</label>
+      <div class="flex" style="flex-wrap:nowrap"><select class="select" id="svPick" style="flex:1;min-width:0">${list.map(x => `<option value="${esc(x.id)}" ${x.id === svSelected ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
+      <button class="btn" id="svLoad" type="button">이 수업에 불러오기</button><button class="btn btn-quiet" id="svDel" type="button" aria-label="선택한 저장 설정 삭제">삭제</button></div>
+      <p class="help" id="svInfo" aria-live="polite"></p></div>`));
+    const pick = $("#svPick", box), info = $("#svInfo", box), cur = () => getSavedSetup(pick.value);
+    const drawInfo = () => { const e = cur(); if (!e) return; svSelected = e.id; const n = TM.normalizeSetupSnapshot(e.snap), note = n.note.trim();
+      info.innerHTML = `${esc(TM.describeSetupSnapshot(e.snap))}<br>${esc(e.from)}에서 ${fmtDate(e.savedAt)}에 저장${note ? `<br>요구사항: “${esc(note.length > 70 ? note.slice(0, 70) + "…" : note)}”` : ""}`; };
+    pick.onchange = drawInfo; drawInfo();
+    $("#svLoad", box).onclick = async () => {
+      const e = cur(); if (!e) return;
+      if (TM.sameSetupSnapshot(TM.snapshotSetup(S), e.snap)) return toast("이미 같은 설정입니다.");
+      if (!await confirmDialog({ title: `‘${e.name}’ 불러오기`, okText: "불러오기",
+        message: `${cls.name}의 팀 구성·하드 제약·주관식 요구사항을 아래 내용으로 바꿉니다.\n\n${TM.describeSetupSnapshot(e.snap)}\n\n이 수업에 지정한 고정·분리 쌍은 그대로 유지됩니다.` })) return;
+      TM.applySetupSnapshot(S, e.snap); markSaved(); toast(`‘${e.name}’ 설정을 불러왔습니다. 아래에서 확인하고 필요하면 수정하세요.`); renderRoute();
+    };
+    $("#svDel", box).onclick = async () => {
+      const e = cur(); if (!e) return;
+      if (!await confirmDialog({ title: "저장한 설정 삭제", message: `‘${e.name}’을(를) 보관함에서 삭제합니다. 이미 이 설정을 불러와 쓴 수업에는 영향이 없습니다.`, okText: "삭제", danger: true })) return;
+      deleteSavedSetup(e.id); svSelected = null; markSaved(); toast("저장한 설정을 삭제했습니다."); renderRoute();
+    };
+  }
+  const nameIn = $("#svName", card);
+  nameIn.oninput = () => clearErr(nameIn);
+  $("#svForm", card).onsubmit = async ev => {
+    ev.preventDefault(); clearErr(nameIn);
+    const nm = nameIn.value, dup = nm.trim() && findSavedSetup(nm);
+    if (!nm.trim()) { setErr(nameIn, "저장할 이름을 입력하세요."); return nameIn.focus(); }
+    if (dup && !await confirmDialog({ title: "같은 이름의 설정이 있습니다", message: `‘${dup.name}’에 현재 설정을 덮어쓸까요? 이전 내용은 복구할 수 없습니다.`, okText: "덮어쓰기" })) return;
+    const r = saveSetupToLibrary(nm, cls);
+    if (!r.ok) { setErr(nameIn, r.error); return nameIn.focus(); }
+    svSelected = r.entry.id; markSaved(); toast(r.replaced ? `‘${r.entry.name}’을(를) 덮어썼습니다.` : `‘${r.entry.name}’(으)로 저장했습니다. 다른 수업에서 불러올 수 있습니다.`); renderRoute();
+  };
+  return card;
+}
+
 function renderSetup(c, arg) {
   const cls = pickClass(arg), wrap = el(`<div class="page stack"></div>`);
   if (!cls) { wrap.append(el(`<div class="card card-pad"><div class="empty"><b>개설한 수업이 없습니다</b></div></div>`)); return c.append(wrap); }
   const S = cls.setup, people = participantsOf(cls).sort((x, y) => x.n.localeCompare(y.n, "ko")), stats = rosterStats(cls);
-  const manual = () => { S.touched = true; if (S.presetId) { S.presetId = null; $$(".preset", wrap).forEach(x => { x.classList.remove("on"); const b = $("[data-a=use]", x); b.textContent = "불러오기"; b.classList.remove("btn-ghost"); }); } markSaved(); };
+  const manual = () => { S.touched = true; markSaved(); };
 
   if (cls.result && !cls.result.confirmedAt) wrap.append(el(`<div class="alert warn"><span>이 수업에는 아직 확정하지 않은 편성 결과가 있습니다. 다시 실행하면 <b>고정하지 않은 팀</b>이 새로 계산됩니다. <button class="link-btn" data-go="result/${cls.id}" type="button">결과 보기</button></span></div>`));
   if (cls.result && cls.result.confirmedAt) wrap.append(el(`<div class="alert ok"><span>이 수업은 편성이 확정되었습니다. 설정은 바꿀 수 있지만 다시 실행하려면 결과 화면에서 ‘확정 취소’가 필요합니다.</span></div>`));
 
-  /* ---- 프리셋 ---- */
-  const pre = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">편성 프리셋</h3>
-    <p class="card-sub">원하는 편성 방식을 고르면 팀 인원·가중치·하드 제약이 한 번에 채워집니다. 저장한 프리셋은 다른 수업에서도 불러올 수 있습니다.</p></div>
-    <div><label class="sr" for="setCls">수업 선택</label><select class="select" id="setCls" style="width:auto">${db.classes.map(x => `<option value="${x.id}" ${x.id === cls.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>
-    <div class="scroll-x"><div class="preset-row" id="prow"></div></div>
-    <form class="save-preset" id="psForm"><label class="sr" for="psName">프리셋 이름</label><input class="input" id="psName" placeholder="현재 설정을 프리셋으로 저장 — 이름 입력 (예: 캡스톤 기본 조건)" maxlength="30"><button class="btn btn-ghost" type="submit">프리셋으로 저장</button></form></div>`);
-  $("#setCls", pre).onchange = e => nav("setup/" + e.target.value);
-  db.presets.forEach(ps => { const on = S.presetId === ps.id;
-    const card = el(`<div class="preset ${on ? "on" : ""}"><div class="p-head"><b>${esc(ps.name)}</b><span class="tag ${ps.own ? "" : "tag-grey"}">${ps.own ? "내 프리셋" : "기본 제공"}</span></div><p class="p-desc">${esc(ps.desc)}</p>
-      <div class="p-w">${WEIGHTS.map(([k, n]) => `<span class="p-wi"><i>${n.slice(0, 2)}</i><span class="p-dots" aria-hidden="true">${[1, 2, 3, 4, 5].map(v => `<span class="${v <= ps.weights[k] ? "on" : ""}"></span>`).join("")}</span><b>${ps.weights[k]}</b></span>`).join("")}</div>
-      <div class="p-foot"><span class="tc-fact">팀 ${ps.size}명</span><span class="tc-fact">제약 ${Object.values(ps.hard).filter(Boolean).length}개</span><span class="grow"></span>
-      <button class="btn btn-sm ${on ? "btn-ghost" : ""}" data-a="use" type="button">${on ? "적용됨" : "불러오기"}</button>${ps.own ? `<button class="x-btn" data-a="del" type="button" aria-label="${esc(ps.name)} 삭제">×</button>` : ""}</div></div>`);
-    $("[data-a=use]", card).onclick = () => { S.size = ps.size; S.rest = ps.rest || "extra"; S.weights = { ...ps.weights }; S.hard = { ...S.hard, sameMajor: !!ps.hard.sameMajor, evenTransfer: !!ps.hard.evenTransfer };
-      S.presetId = ps.id; S.touched = true; markSaved(); toast(`‘${ps.name}’ 프리셋을 ${cls.name}에 적용했습니다. 수업별 설정이라 다른 수업에는 영향이 없습니다.`); renderRoute(); };
-    const del = $("[data-a=del]", card); if (del) del.onclick = async () => { if (await confirmDialog({ title: "프리셋 삭제", message: `‘${ps.name}’ 프리셋을 삭제합니다. 이미 적용한 수업의 설정은 그대로 유지됩니다.`, okText: "삭제", danger: true })) {
-      db.presets.splice(db.presets.indexOf(ps), 1); db.classes.forEach(k => { if (k.setup.presetId === ps.id) k.setup.presetId = null; }); markSaved(); renderRoute(); } };
-    $("#prow", pre).append(card); });
-  $("#psForm", pre).onsubmit = ev => { ev.preventDefault(); const i = $("#psName", pre); clearErr(i); const nm = i.value.trim();
-    if (!nm) return setErr(i, "프리셋 이름을 입력하세요."); if (db.presets.some(p => p.name.toLowerCase() === nm.toLowerCase())) return setErr(i, "같은 이름의 프리셋이 이미 있습니다.");
-    const ps = { id: nextId("ps"), name: nm, desc: `${cls.name}에서 저장한 설정`, own: true, size: S.size, rest: S.rest, weights: { ...S.weights }, hard: { sameMajor: !!S.hard.sameMajor, fixPair: false, splitPair: false, evenTransfer: !!S.hard.evenTransfer } };
-    db.presets.push(ps); S.presetId = ps.id; markSaved(); toast(`‘${nm}’ 프리셋을 저장했습니다. 다른 수업의 편성 설정에서 불러올 수 있습니다.`); renderRoute(); };
-  wrap.append(pre);
+  wrap.append(setupLibraryCard(cls));
 
   /* ---- 팀 구성 ---- */
-  const comp = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">팀 구성</h3><p class="card-sub">${esc(cls.name)} · 등록 ${stats.total}명 · 제출 ${stats.done}명</p></div></div>
+  const comp = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">팀 구성</h3><p class="card-sub">${esc(cls.name)} · 등록 ${stats.total}명 · 제출 ${stats.done}명</p></div>
+    <div><label class="sr" for="setCls">수업 선택</label><select class="select" id="setCls" style="width:auto">${db.classes.map(x => `<option value="${x.id}" ${x.id === cls.id ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select></div></div>
     <div class="row2"><div class="field"><label for="stSize">팀당 인원</label><select class="select" id="stSize">${[2, 3, 4, 5, 6, 7, 8].map(n => `<option ${n === S.size ? "selected" : ""}>${n}</option>`).join("")}</select></div>
     <div class="field"><label for="stRest">인원이 나누어지지 않을 때</label><select class="select" id="stRest"><option value="extra" ${S.rest === "extra" ? "selected" : ""}>일부 팀 1명 추가 (팀 수 ↓)</option><option value="fewer" ${S.rest === "fewer" ? "selected" : ""}>일부 팀 1명 감소 (팀 수 ↑)</option></select></div></div>
     <div class="field"><label for="stMiss">미제출자 처리</label><select class="select" id="stMiss"><option value="default" ${S.miss === "default" ? "selected" : ""}>기본값 배정 (학과·학년만 사용, 결과에 ‘설문 미제출’ 표시)</option>
@@ -114,15 +147,8 @@ function renderSetup(c, arg) {
   $("#stSize", comp).onchange = e => { S.size = +e.target.value; manual(); calc(); };
   $("#stRest", comp).onchange = e => { S.rest = e.target.value; manual(); calc(); };
   $("#stMiss", comp).onchange = e => { S.miss = e.target.value; S.touched = true; markSaved(); calc(); };
+  $("#setCls", comp).onchange = e => nav("setup/" + e.target.value);
   calc(); wrap.append(comp);
-
-  /* ---- 가중치 ---- */
-  const wc = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">가중치</h3><p class="card-sub">1점 = 고려하지 않음 · 5점 = 매우 중요 · 오른쪽 %는 실제 반영 비율</p></div></div><div id="wl"></div><p class="help" id="wnote"></p></div>`);
-  const shares = () => { const ew = TM.effectiveWeights(S.weights); WEIGHTS.forEach(([k]) => { const v = ew.equal ? 25 : Math.round(ew[k] / ew.sum * 100); $(`[data-share="${k}"]`, wc).textContent = !ew.equal && ew[k] === 0 ? "제외" : v + "%"; });
-    $("#wnote", wc).textContent = ew.equal ? "모든 항목이 1점이라 균등 가중(25%씩)으로 계산합니다." : ""; };
-  WEIGHTS.forEach(([k, n]) => { const row = el(`<div class="weight-row"><span class="wr-name">${n}</span><div class="flex"><span class="dpw"></span><span class="wr-val" data-share="${k}" style="width:46px"></span></div></div>`);
-    $(".dpw", row).append(dotPicker({ value: S.weights[k], label: `${n} 가중치`, onChange: v => { S.weights[k] = v; manual(); shares(); } })); $("#wl", wc).append(row); });
-  shares(); wrap.append(wc);
 
   /* ---- 하드 제약 + 쌍 ---- */
   const hc = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">하드 제약</h3><p class="card-sub">반드시 지켜야 하는 조건입니다. 지키지 못하면 결과 화면에 위반으로 표시됩니다.</p></div></div>

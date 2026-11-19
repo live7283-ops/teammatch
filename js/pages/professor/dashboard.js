@@ -28,7 +28,7 @@ function renderProfDashboard(c) {
     const s = rosterStats(f), st = classStatus(f), steps = [
       { ok: true, t: "수업 개설과 참여 코드 배포", go: ["classes", "수업 보기"] },
       { ok: st.key !== "collecting", t: `설문 수집 — 제출 ${s.done}/${s.total}명${s.pending ? ` (미제출 ${s.pending}명)` : ""}`, go: ["roster/" + f.id, s.pending ? "리마인드" : "현황 보기"] },
-      { ok: !!f.setup.touched || !!f.result, t: "편성 조건과 가중치 확정", go: ["setup/" + f.id, "설정"] },
+      { ok: !!f.setup.touched || !!f.result, t: "편성 조건 확정", go: ["setup/" + f.id, "설정"] },
       { ok: !!f.result, t: "편성 실행 후 결과 검토", go: ["result/" + f.id, "결과"] },
       { ok: st.key === "done", t: "팀 확정 및 학생에게 공개", go: ["result/" + f.id, "확정"] }];
     const next = steps.findIndex(x => !x.ok);

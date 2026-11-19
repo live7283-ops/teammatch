@@ -23,6 +23,8 @@ t("0명, 인원 < 팀 크기", () => { assert.equal(L.planTeamCount(0, 4, "extra
 console.log("effectiveWeights / parseNote");
 t("가중치 1 = 고려하지 않음 → 0", () => { const e = L.effectiveWeights({ major: 1, role: 5, time: 1, trait: 1 }); assert.equal(e.major, 0); assert.equal(e.role, 4); });
 t("전부 1이면 균등 가중으로 대체", () => assert.equal(L.effectiveWeights({ major: 1, role: 1, time: 1, trait: 1 }).equal, true));
+t("DEFAULT_WEIGHTS: 네 항목 모두 1~5 정수이고 '전부 1'(균등 대체)이 아니다", () => { const w = L.DEFAULT_WEIGHTS; assert.deepEqual(Object.keys(w).sort(), ["major", "role", "time", "trait"]); Object.values(w).forEach(v => assert.ok(Number.isInteger(v) && v >= 1 && v <= 5)); assert.equal(L.effectiveWeights(w).equal, false); });
+t("DEFAULT_WEIGHTS 는 실행 중 실수로 바뀌지 않는다 (freeze)", () => { assert.ok(Object.isFrozen(L.DEFAULT_WEIGHTS)); });
 t("기획안 예시 문장 해석", () => { const c = L.parseNote("발표 경험이 있는 학생과 개발 경험이 있는 학생을 각 팀에 최소 1명씩 포함해 주세요. 4학년은 한 팀에 몰리지 않게 해주세요.").map(x => x.id); assert.deepEqual(c, ["present", "dev", "year4"]); });
 t("인식 불가 문장은 조건 0개", () => assert.equal(L.parseNote("서로 친하게 지내면 좋겠어요").length, 0));
 
@@ -72,4 +74,36 @@ t("평가는 팀 교환 후에도 재계산 가능 (공통 시간은 실제 교�
   assert.equal(m.overlap, manual);
 });
 t("성능: 45명 편성 < 1.5초", () => { const t0 = Date.now(); L.solve(people, baseSetup(), { seed: 1 }); const dt = Date.now() - t0; console.log("     소요", dt, "ms"); assert.ok(dt < 1500); });
+console.log("편성 설정 보관함 (저장·불러오기)");
+t("snapshotSetup: 재사용 가능한 항목만 저장 (쌍·시드·가중치·결과 제외)", () => {
+  const snap = L.snapshotSetup({ ...baseSetup(), size: 5, rest: "fewer", miss: "exclude", hard: { sameMajor: false, evenTransfer: true, fixPair: true }, note: "발표 경험자 포함", pairs: [{ a: "s1", b: "s2", type: "fix" }], seed: 9, parsedOff: { dev: true, bogus: true } });
+  assert.deepEqual(Object.keys(snap).sort(), ["hard", "miss", "note", "parsedOff", "rest", "size"]);
+  assert.deepEqual(snap, { size: 5, rest: "fewer", miss: "exclude", hard: { sameMajor: false, evenTransfer: true }, note: "발표 경험자 포함", parsedOff: { dev: true } });
+});
+t("applySetupSnapshot: 대상 수업의 고정·분리 쌍, 시드, 가중치는 그대로 둔다", () => {
+  const target = { ...baseSetup(), pairs: [{ a: "s1", b: "s2", type: "split" }], seed: 4, hard: { sameMajor: true, fixPair: false } };
+  L.applySetupSnapshot(target, { size: 3, rest: "fewer", miss: "extend", hard: { sameMajor: false, evenTransfer: true }, note: "디자인", parsedOff: { design: true } });
+  assert.equal(target.size, 3); assert.equal(target.rest, "fewer"); assert.equal(target.miss, "extend"); assert.equal(target.note, "디자인");
+  assert.deepEqual(target.hard, { sameMajor: false, fixPair: false, evenTransfer: true }); assert.deepEqual(target.parsedOff, { design: true });
+  assert.equal(target.pairs.length, 1); assert.equal(target.seed, 4); assert.deepEqual(target.weights, { major: 4, role: 5, time: 3, trait: 3 });
+});
+t("스냅샷은 원본과 독립 (원본을 바꿔도 저장본이 변하지 않음, 불러온 뒤 수정해도 저장본 불변)", () => {
+  const src = baseSetup(); src.parsedOff = { dev: true }; const snap = L.snapshotSetup(src); src.parsedOff.dev = false; src.note = "바뀜";
+  assert.equal(snap.parsedOff.dev, true); assert.equal(snap.note, "");
+  const tgt = baseSetup(); L.applySetupSnapshot(tgt, snap); tgt.parsedOff.year4 = true; assert.equal(snap.parsedOff.year4, undefined);
+});
+t("normalizeSetupSnapshot: 손상·구버전 값도 안전하게 보정", () => {
+  const n = L.normalizeSetupSnapshot({ size: 99, rest: "x", miss: null, hard: "oops", note: "가".repeat(600), parsedOff: { dev: "yes", year4: true } });
+  assert.equal(n.size, 4); assert.equal(n.rest, "extra"); assert.equal(n.miss, "default"); assert.equal(n.hard.sameMajor, true); assert.equal(n.hard.evenTransfer, false);
+  assert.equal(n.note.length, 500); assert.deepEqual(n.parsedOff, { year4: true });
+  assert.equal(L.normalizeSetupSnapshot(null).size, 4);
+});
+t("불러온 설정으로 실제 편성이 실행되고 제약이 지켜진다", () => {
+  const snap = L.snapshotSetup({ ...baseSetup(), size: 3, note: "발표 경험이 있는 학생을 각 팀에 포함" }), tgt = baseSetup(); L.applySetupSnapshot(tgt, snap);
+  const r = L.solve(people, tgt, { seed: 1 }); assert.deepEqual(r.teams.map(x => x.members.length).sort(), r.plan.sizes.slice().sort()); assert.ok(r.teams.every(x => x.members.length >= 3));
+});
+t("sameSetupSnapshot / describeSetupSnapshot", () => {
+  const a = L.snapshotSetup(baseSetup()); assert.ok(L.sameSetupSnapshot(a, { ...a })); assert.ok(!L.sameSetupSnapshot(a, { ...a, size: 5 }));
+  assert.match(L.describeSetupSnapshot({ size: 5, hard: { sameMajor: true }, note: "x" }), /팀당 5명.*같은 학과 2명 이하.*요구사항 있음/);
+});
 console.log(`\n${pass}개 통과`);
