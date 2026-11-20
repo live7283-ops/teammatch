@@ -1,0 +1,7 @@
+root = true
+
+# 모든 텍스트 파일: UTF-8(BOM 없음) + LF 줄바꿈.
+# VS Code는 "EditorConfig for VS Code" 확장을 설치하면 적용됩니다 (JetBrains 계열은 기본 지원).
+[*]
+charset = utf-8
+end_of_line = lf
