@@ -27,7 +27,14 @@
   const mean = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
   const std = a => { const m = mean(a); return Math.sqrt(mean(a.map(x => (x - m) ** 2))); };
 
-  /* ---------- 가중치: 1 = 고려하지 않음(0), 5 = 매우 중요(4) ---------- */
+  /* ---------- 가중치: 교수가 조절하지 않는 '제작팀 고정값' ★ ----------
+     모든 수업의 편성에 일괄 적용된다. 값을 바꾸려면 아래 한 곳만 고치면 된다.
+     · 1~5점 척도. 1점은 '반영하지 않음'이며, 계산에는 (점수 − 1)의 비율을 쓴다 (effectiveWeights 참고)
+     · 백엔드 엔진(SoftWeights)의 기본값 4/5/3/3 과 같은 값이다. 다만 백엔드는 1점도 그대로 반영하므로
+       비율 계산 방식이 다르다 → 백엔드와 연동할 때 한쪽으로 맞출 것 */
+  const DEFAULT_WEIGHTS = Object.freeze({ major: 4, role: 5, time: 3, trait: 3 });
+
+  /* ---------- 가중치 해석: 1 = 고려하지 않음(0), 5 = 매우 중요(4) ---------- */
   function effectiveWeights(W) {
     const e = {
       major: Math.max(0, (W.major || 1) - 1), role: Math.max(0, (W.role || 1) - 1),
@@ -252,10 +259,58 @@
     return { teams: best || lockedIn, objective: bestObj, plan };
   }
 
+  /* ---------- 편성 설정 보관함: 다른 수업에서 다시 쓸 수 있는 '재사용 가능한 부분'만 추려 저장/적용 ----------
+     저장하는 것: 팀당 인원 · 나누어지지 않을 때 · 미제출자 처리 · 하드 제약(학과 2명 이하, 편입·유학생 분배) · 주관식 요구사항(+해석 체크 해제 상태)
+     저장하지 않는 것:
+       · 고정/분리 쌍(pairs) — 특정 수업의 학생 id를 가리키므로 다른 수업에서는 의미가 없다
+       · 가중치 — 제작팀 고정값(DEFAULT_WEIGHTS)을 쓴다
+       · 시드·결과 — 수업별 실행 이력 */
+  const SETUP_REST = ["extra", "fewer"], SETUP_MISS = ["default", "exclude", "extend"];
+  const NOTE_COND_IDS = ["present", "dev", "design", "year1", "year2", "year3", "year4"];
+  function snapshotSetup(setup) {
+    const s = setup || {}, off = {};
+    NOTE_COND_IDS.forEach(id => { if (s.parsedOff && s.parsedOff[id]) off[id] = true; });
+    return normalizeSetupSnapshot({ size: s.size, rest: s.rest, miss: s.miss, hard: s.hard, note: s.note, parsedOff: off });
+  }
+  /** 저장소에서 읽은 값(손상·구버전 포함)을 항상 유효한 형태로 바로잡는다 */
+  function normalizeSetupSnapshot(raw) {
+    const r = raw && typeof raw === "object" ? raw : {}, h = r.hard && typeof r.hard === "object" ? r.hard : {}, off = {};
+    NOTE_COND_IDS.forEach(id => { if (r.parsedOff && r.parsedOff[id] === true) off[id] = true; });
+    const size = Number(r.size);
+    return {
+      size: Number.isInteger(size) && size >= 2 && size <= 8 ? size : 4,
+      rest: SETUP_REST.includes(r.rest) ? r.rest : "extra",
+      miss: SETUP_MISS.includes(r.miss) ? r.miss : "default",
+      hard: { sameMajor: h.sameMajor === undefined ? true : !!h.sameMajor, evenTransfer: !!h.evenTransfer },
+      note: String(r.note || "").slice(0, 500),
+      parsedOff: off
+    };
+  }
+  /** 수업의 setup에 스냅샷을 덮어쓴다. 그 수업의 고정/분리 쌍·시드·가중치는 건드리지 않는다. */
+  function applySetupSnapshot(setup, snap) {
+    const n = normalizeSetupSnapshot(snap);
+    setup.size = n.size; setup.rest = n.rest; setup.miss = n.miss;
+    setup.hard = { ...(setup.hard || {}), sameMajor: n.hard.sameMajor, evenTransfer: n.hard.evenTransfer };
+    setup.note = n.note; setup.parsedOff = { ...n.parsedOff }; setup.touched = true;
+    return setup;
+  }
+  const sameSetupSnapshot = (a, b) => JSON.stringify(normalizeSetupSnapshot(a)) === JSON.stringify(normalizeSetupSnapshot(b));
+  /** 목록·확인창에 보여줄 한 줄 요약 */
+  function describeSetupSnapshot(snap) {
+    const n = normalizeSetupSnapshot(snap), parts = [`팀당 ${n.size}명`,
+      n.rest === "extra" ? "남으면 일부 팀 +1명" : "남으면 일부 팀 −1명",
+      n.miss === "default" ? "미제출 기본값 배정" : n.miss === "exclude" ? "미제출 제외" : "미제출 시 마감 연장"];
+    if (n.hard.sameMajor) parts.push("같은 학과 2명 이하");
+    if (n.hard.evenTransfer) parts.push("편입·유학생 분배");
+    parts.push(n.note.trim() ? "주관식 요구사항 있음" : "주관식 요구사항 없음");
+    return parts.join(" · ");
+  }
+
   const api = {
     DAYS, BLOCKS, ROLES, DEV_ROLES, ALL_SLOTS, slotKey, mulberry32, mean,
-    effectiveWeights, planTeamCount, describePlan, parseNote, activeConditions,
-    teamMetrics, evaluate, solve, intersect
+    DEFAULT_WEIGHTS, effectiveWeights, planTeamCount, describePlan, parseNote, activeConditions,
+    teamMetrics, evaluate, solve, intersect,
+    snapshotSetup, normalizeSetupSnapshot, applySetupSnapshot, sameSetupSnapshot, describeSetupSnapshot
   };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.TM = Object.assign(root.TM || {}, api);

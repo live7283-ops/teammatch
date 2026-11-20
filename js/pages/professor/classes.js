@@ -36,12 +36,17 @@ function renderClassForm(c) {
     <div class="row2"><div class="field"><label for="ncKind">수업 성격</label><select class="select" id="ncKind">${["개발 프로젝트", "기획·마케팅 프로젝트", "학술 세미나", "공모전·해커톤"].map(x => `<option>${x}</option>`).join("")}</select>
     <p class="help">선택한 성격에 맞는 설문 문항 템플릿이 적용됩니다.</p></div>
     <div class="field"><label for="ncDue">설문 제출 마감 (23:59) <span class="req">*</span></label><input class="input" id="ncDue" type="date" value="${toDateInput(d)}" min="${toDateInput(new Date())}"></div></div>
+    ${savedSetups().length ? `<div class="field"><label for="ncSetup">편성 설정 불러오기</label><select class="select" id="ncSetup"><option value="">기본값으로 시작</option>${savedSetups().map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join("")}</select>
+    <p class="help" id="ncSetupInfo">‘내 설정 보관함’에 저장한 팀 구성·하드 제약·주관식 요구사항을 미리 적용합니다. 개설 후 편성 설정에서 바꿀 수 있습니다.</p></div>` : ""}
     <div class="field"><label>학생 참여 코드</label><div class="code-box"><span class="cd" id="ncJoin">${code}</span><span class="grow"></span>
     <button class="btn btn-quiet btn-sm" id="ncCopy" type="button">복사</button><button class="btn btn-quiet btn-sm" id="ncRegen" type="button">재생성</button></div>
     <p class="help">학생은 가입 시 또는 ‘매칭 준비’ 화면에서 이 코드를 입력해 합류합니다.</p></div>
     <p class="err" id="ncErr" role="alert"></p>
     <div class="wizard-nav"><button class="btn btn-ghost" id="ncCancel" type="button">취소</button><button class="btn" type="submit">수업 개설 완료</button></div></form>`);
   $(".back-link", form).onclick = $("#ncCancel", form).onclick = () => nav("classes");
+  const ncSetup = $("#ncSetup", form);
+  if (ncSetup) ncSetup.onchange = () => { const e = getSavedSetup(ncSetup.value);
+    $("#ncSetupInfo", form).textContent = e ? TM.describeSetupSnapshot(e.snap) : "‘내 설정 보관함’에 저장한 팀 구성·하드 제약·주관식 요구사항을 미리 적용합니다. 개설 후 편성 설정에서 바꿀 수 있습니다."; };
   $("#ncCopy", form).onclick = () => copyText($("#ncJoin", form).textContent);
   $("#ncRegen", form).onclick = () => { $("#ncJoin", form).textContent = genCode(); toast("참여 코드를 새로 만들었습니다."); };
   form.addEventListener("submit", ev => { ev.preventDefault(); clearAllErr(form);
@@ -54,7 +59,8 @@ function renderClassForm(c) {
     if (due.getTime() < Date.now()) return bad("ncDue", "마감일은 오늘 이후여야 합니다.");
     const k = { id: nextId("c"), name: v.name, code: v.code, term: v.term, cap: v.cap, join: g("ncJoin").textContent, deadline: due.toISOString(), kind: v.kind,
       createdAt: new Date().toISOString(), setup: defaultSetup(), roster: [], result: null, tas: [] };
-    db.classes.unshift(k); lastClassId = k.id; markSaved(); renderNav(); toast("수업을 개설했습니다. 참여 코드를 학생에게 전달하세요."); nav("classes"); });
+    const chosen = ncSetup && getSavedSetup(ncSetup.value); if (chosen) TM.applySetupSnapshot(k.setup, chosen.snap);
+    db.classes.unshift(k); lastClassId = k.id; markSaved(); renderNav(); toast(chosen ? `수업을 개설했습니다. ‘${chosen.name}’ 설정이 적용되었습니다.` : "수업을 개설했습니다. 참여 코드를 학생에게 전달하세요."); nav("classes"); });
   const pg = el(`<div class="page"></div>`); pg.append(form); c.append(pg);
   $("#ncName", form).focus();
 }

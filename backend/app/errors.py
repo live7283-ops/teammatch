@@ -36,6 +36,18 @@ def _body(code: int, message: str, path: str, detail=None) -> dict:
     }
 
 
+def _safe_errors(errors: list) -> list:
+    """errors() 의 ctx 에 예외 객체(ValueError 등)가 들어 있으면 JSON 직렬화가 실패하므로 문자열로 바꾼다."""
+    safe = []
+    for e in errors:
+        e = dict(e)
+        if isinstance(e.get("ctx"), dict):
+            e["ctx"] = {k: (v if isinstance(v, (str, int, float, bool, type(None))) else str(v))
+                        for k, v in e["ctx"].items()}
+        safe.append(e)
+    return safe
+
+
 def register_error_handlers(app: FastAPI) -> None:
     """앱에 공통 예외 핸들러들을 등록한다."""
 
@@ -57,7 +69,7 @@ def register_error_handlers(app: FastAPI) -> None:
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
                 "요청 형식이 올바르지 않습니다.",
                 request.url.path,
-                detail=exc.errors(),
+                detail=_safe_errors(exc.errors()),
             ),
         )
 

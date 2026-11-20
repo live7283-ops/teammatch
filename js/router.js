@@ -40,7 +40,7 @@ const ROUTES = {
     dashboard: { t: "대시보드", s: () => `2026학년도 2학기 · 수업 ${db.classes.length}개`, r: renderProfDashboard, i: "dash", cta: ["편성 설정으로", "setup"] },
     classes: { t: "내 수업", s: () => "수업을 개설하고 참여 코드를 전달하세요", r: renderClasses, i: "folder", badge: () => db.classes.length },
     roster: { t: "학생 제출 현황", s: () => "설문 제출 상태를 확인하고 독려합니다", r: renderRoster, i: "list", cls: true },
-    setup: { t: "편성 설정", s: () => "가중치와 반드시 지킬 조건을 정합니다", r: renderSetup, i: "sliders", cls: true },
+    setup: { t: "편성 설정", s: () => "팀 구성과 반드시 지킬 조건을 정합니다", r: renderSetup, i: "sliders", cls: true },
     result: { t: "매칭 결과", s: () => "편성 근거를 확인하고 확정합니다", r: renderProfResult, i: "grid", cls: true },
     ta: { t: "조교 관리", s: () => "과목 단위로 조교 권한을 부여합니다", r: renderTA, i: "badge", cls: true },
     profile: { t: "내 프로필", s: () => "계정 정보를 확인하고 수정합니다", r: renderProfProfile, i: "user" }

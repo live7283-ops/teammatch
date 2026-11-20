@@ -53,7 +53,7 @@ function renderProfile(c) {
     a.skills.push({ n: v, l: 3 }); i.value = ""; drawSk(); saved(); upd(); i.focus(); };
   drawSk(); wrap.append(sk);
 
-  /* 협업 성향 — 1~5점 원형 선택 (가중치 UI와 동일) */
+  /* 협업 성향 — 1~5점 원형 선택 */
   a.traitTouched = a.traitTouched || {};
   const tr = el(`<div class="card card-pad"><div class="card-head"><div><h3 class="card-title">협업 성향 <span class="req">(필수)</span></h3><p class="card-sub">네 문항 모두 선택해야 응답으로 인정됩니다</p></div>
     <span class="tag ${a.traitsSet ? "tag-mint" : "tag-amber"}" id="trs">${a.traitsSet ? "응답 완료" : "응답 전"}</span></div><div id="trl"></div></div>`);

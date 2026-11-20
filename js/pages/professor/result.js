@@ -58,10 +58,12 @@ function renderProfResult(c, arg, opts = {}) {
       ${readOnly ? "" : `<p class="sm mt-8">학생 카드를 눌러 선택한 뒤 다른 팀 학생을 누르면 서로 교환됩니다. 점수와 위반은 즉시 다시 계산됩니다.</p>`}</div>`));
     else wrap.append(el(`<div class="alert ok mb-16">설정한 하드 제약과 해석된 요구사항을 모두 충족했습니다.</div>`));
 
+    const eng = res.engine || null;
+    if (eng) wrap.append(enginePanel(eng));
     if (sel) { const who = teams.flatMap(t => t.members).find(m => m.id === sel.id); wrap.append(el(`<div class="alert swap-hint mb-16" role="status"><span><b>${esc(who ? who.n : "")}</b> 선택됨 — 교환할 다른 팀의 학생을 누르세요. (Esc로 취소)</span></div>`)); }
 
     const grid = el(`<div class="team-grid"></div>`);
-    teams.forEach((t, i) => { const m = ev.per[i].metrics, is = ev.per[i].issues, cls2 = m.score >= 80 ? "" : m.score >= 65 ? "mid" : "low";
+    teams.forEach((t, i) => { const et = engineTeamOf(eng, t), m = ev.per[i].metrics, is = ev.per[i].issues, cls2 = m.score >= 80 ? "" : m.score >= 65 ? "mid" : "low";
       const card = el(`<article class="team-card ${t.locked ? "locked" : ""} ${is.some(x => x.level === "error") ? "issue" : ""}"><div class="tc-top"><h4>팀 ${t.no}${t.locked ? ' <span class="tag tag-grey">고정</span>' : ""}</h4>
         <div class="score ${cls2}"><span class="s">${m.score}</span><span class="t">/100</span></div></div><div class="score-bar ${cls2}"><i style="width:${m.score}%"></i></div><div class="tc-mem"></div>
         <div class="parts">${[["major", "전공 다양", m.parts.major], ["role", "역할 균형", m.parts.role], ["time", "일정 호환", m.parts.time], ["trait", "성향 호환", m.parts.trait]].map(([k, l, v]) => `<div class="pt ${!ew.equal && ew[k] === 0 ? "off" : ""}"><span>${l}</span><span class="score-bar"><i style="width:${Math.round(v)}%"></i></span><span>${Math.round(v)}</span></div>`).join("")}</div>
@@ -70,7 +72,7 @@ function renderProfResult(c, arg, opts = {}) {
         ${readOnly ? "" : `<div class="mt-8"><button class="btn btn-quiet btn-sm" data-a="lock" type="button">${t.locked ? "고정 해제" : "이 팀 고정"}</button></div>`}</article>`);
       t.members.forEach(mm => { const on = sel && sel.id === mm.id;
         const row = el(`<div class="member ${readOnly ? "" : "pick"} ${on ? "sel" : ""}"><span class="avatar" aria-hidden="true">${esc(initial(mm.n))}</span><span class="grow"><span class="m-nm block">${esc(mm.n)}${mm.submitted ? "" : '<span class="miss">설문 미제출</span>'}</span>
-          <span class="m-mt">${esc(mm.m)} · ${esc(mm.yearLabel || mm.y + "학년")}</span></span><span class="tag tag-grey m-role">${esc((mm.roles || [])[0] || "역할 미정")}</span></div>`);
+          <span class="m-mt">${esc(mm.m)} · ${esc(mm.yearLabel || mm.y + "학년")}</span></span><span class="tag tag-grey m-role">${esc((et && et.roles[String(mm.id)]) || (mm.roles || [])[0] || "역할 미정")}</span></div>`);
         if (!readOnly) { makeClickable(row, () => {
           if (t.locked) return toast("고정된 팀입니다. ‘고정 해제’ 후 교환하세요.");
           if (!sel || sel.no === t.no) { sel = on ? null : { no: t.no, id: mm.id }; return render(); }
@@ -78,6 +80,7 @@ function renderProfResult(c, arg, opts = {}) {
           const a1 = A.members[i1]; A.members[i1] = t.members[j1]; t.members[j1] = a1; sel = null; markSaved(); toast(`${a1.n} ↔ ${mm.n} 교환했습니다. 점수를 다시 계산했습니다.`); render();
         }, `${mm.n} 선택`); row.setAttribute("aria-pressed", String(!!on)); }
         $(".tc-mem", card).append(row); });
+      const en = engineNote(eng, et); if (en) $(".tc-foot", card).after(en);
       const lk = $("[data-a=lock]", card); if (lk) lk.onclick = () => { t.locked = !t.locked; markSaved(); render(); };
       grid.append(card); });
     wrap.append(grid);
@@ -86,4 +89,47 @@ function renderProfResult(c, arg, opts = {}) {
     window.scrollTo({ top: y });
   };
   render();
+}
+
+/* ---- 서버 AI 엔진 결과 (res.engine 이 있을 때만 쓰인다) ---- */
+
+/** 화면의 팀과 구성원이 똑같은 엔진 팀을 찾는다. 교환으로 구성이 바뀌었으면 null */
+function engineTeamOf(eng, t) {
+  if (!eng) return null;
+  const ids = t.members.map(m => String(m.id));
+  return eng.teams.find(x => x.ids.length === ids.length && ids.every(id => x.ids.includes(id))) || null;
+}
+
+/** 팀 카드 아래에 붙는 AI 요약. 엔진 결과와 구성이 다르면 안내만 표시 */
+function engineNote(eng, et) {
+  if (!eng) return null;
+  if (!et) return el(`<p class="sm muted mt-8">교환됨 — AI 점수 미반영 (위 점수는 현재 구성으로 다시 계산한 값)</p>`);
+  const sub = et.subscores || {};
+  return el(`<div class="eng-note mt-8"><div class="sm"><b>AI 엔진 점수 ${et.fit}</b> · ${esc(et.summary || "")}</div>
+    <div class="sm muted">전공 ${Math.round(sub.major ?? 0)} · 역할 ${Math.round(sub.role ?? 0)} · 시간 ${Math.round(sub.time ?? 0)} · 성향 ${Math.round(sub.trait ?? 0)}</div>
+    ${et.warnings.length ? `<ul class="issue-list">${et.warnings.map(w => `<li><span class="lv warn">주의</span><span>${esc(w)}</span></li>`).join("")}</ul>` : ""}</div>`);
+}
+
+/** 단계별 평균/최저 조화도 추이를 작은 선 그래프로 */
+function traceChart(tr) {
+  const n = (tr.stage || []).length; if (n < 2) return "";
+  const W = 320, H = 90, P = 6, all = [...tr.avg, ...tr.low], lo = Math.min(...all) - 2, hi = Math.max(...all) + 2;
+  const pt = (v, i) => `${(P + i * (W - 2 * P) / (n - 1)).toFixed(1)},${(H - P - (v - lo) / (hi - lo || 1) * (H - 2 * P)).toFixed(1)}`;
+  const line = (arr, col) => `<polyline fill="none" stroke="${col}" stroke-width="2" points="${arr.map(pt).join(" ")}"/>`;
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" role="img" aria-label="단계별 평균·최저 조화도 추이">${line(tr.avg, "var(--indigo)")}${line(tr.low, "var(--amber)")}</svg>
+    <div class="sm muted">파랑 = 평균 ${tr.avg[0].toFixed(1)} → ${tr.avg[n - 1].toFixed(1)} · 주황 = 최저 팀 ${tr.low[0].toFixed(1)} → ${tr.low[n - 1].toFixed(1)}</div>`;
+}
+
+/** 결과 화면 상단의 'AI 엔진 결과' 패널 */
+function enginePanel(e) {
+  const rules = e.parsedRules || [], conds = e.conditions || [], w = e.weightsUsed;
+  return el(`<details class="card card-pad mb-16" open><summary style="cursor:pointer"><b>AI 엔진 결과</b> <span class="tag">서버 TeamFit</span>
+      <span class="sm muted">목적함수 J ${e.objectiveJ} · 평균 ${e.avgFit} · 최저 ${e.minFit} · 하드 위반 ${e.violations}건 · 교환 ${e.swaps}회 · 엔진 ${e.elapsedMs}ms (왕복 ${e.clientMs}ms) · 시드 #${e.seed}</span></summary>
+    <div class="grid-2" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:14px">
+      <div><b class="sm">최적화 추이 (초기 배치 → 국소 탐색 → 담금질)</b>${traceChart(e.trace || {})}</div>
+      <div><b class="sm">조건 충족 여부</b>
+        ${conds.length ? `<ul class="issue-list">${conds.map(c => `<li><span class="lv ${c.satisfied ? "ok" : "error"}">${c.satisfied ? "충족" : "위반"}</span><span>${esc(c.label || c.rule_id)}${c.violations ? ` (${c.violations}건)` : ""}</span></li>`).join("")}</ul>` : `<p class="sm muted">적용된 하드 조건이 없습니다.</p>`}
+        <b class="sm" style="display:block;margin-top:10px">메모 해석</b>
+        ${rules.length ? `<ul class="issue-list">${rules.map(r => `<li><span class="lv ${r.kind === "hard" ? "error" : "warn"}">${r.kind === "hard" ? "하드" : "소프트"}</span><span>${esc(r.description)}</span></li>`).join("")}</ul>` : `<p class="sm muted">인식된 조건이 없습니다.</p>`}
+        ${w ? `<p class="sm muted" style="margin-top:8px">적용 가중치 — 전공 ${w.major} · 역할 ${w.role} · 시간 ${w.time} · 성향 ${w.trait}</p>` : ""}</div></div></details>`);
 }

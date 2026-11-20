@@ -28,7 +28,7 @@ window.addEventListener("pagehide", flushSave);
 document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") flushSave(); });
 
 function validDb(d) {
-  return !!(d && d.v === DB_VERSION && d.accounts && typeof d.accounts === "object" && Array.isArray(d.classes) && Array.isArray(d.presets)
+  return !!(d && d.v === DB_VERSION && d.accounts && typeof d.accounts === "object" && Array.isArray(d.classes)
     && d.classes.every(c => c && c.setup && Array.isArray(c.roster) && Array.isArray(c.tas))
     && Object.values(d.accounts).every(a => a && (a.role === "student" || a.role === "professor")));
 }
@@ -42,17 +42,10 @@ function setSession(email) { session = email ? { email } : null; try { email ? s
 /* ---------- 기본값 ---------- */
 const NOTE_SAMPLE = "발표 경험이 있는 학생과 개발 경험이 있는 학생을 각 팀에 최소 1명씩 포함해 주세요. 4학년은 한 팀에 몰리지 않게 해주세요.";
 function defaultSetup(note = "") {
-  return { size: 4, rest: "extra", miss: "default", weights: { major: 3, role: 3, time: 3, trait: 3 },
+  return { size: 4, rest: "extra", miss: "default", weights: { ...TM.DEFAULT_WEIGHTS },
     hard: { sameMajor: true, fixPair: false, splitPair: false, evenTransfer: false },
-    pairs: [], note, parsedOff: {}, presetId: "ps0", seed: 0 };
+    pairs: [], note, parsedOff: {}, seed: 0 };
 }
-const PRESETS = [
-  { id: "ps0", name: "균형 배분", desc: "네 항목을 고르게 반영하는 기본값", own: false, size: 4, rest: "extra", weights: { major: 3, role: 3, time: 3, trait: 3 }, hard: { sameMajor: true, fixPair: false, splitPair: false, evenTransfer: false } },
-  { id: "ps1", name: "전공 다양성 우선", desc: "융합 프로젝트처럼 학과가 섞여야 하는 수업", own: false, size: 4, rest: "extra", weights: { major: 5, role: 4, time: 2, trait: 2 }, hard: { sameMajor: true, fixPair: false, splitPair: false, evenTransfer: true } },
-  { id: "ps2", name: "역량 균형 우선", desc: "개발·기획 역할이 팀마다 고루 필요한 수업", own: false, size: 4, rest: "extra", weights: { major: 3, role: 5, time: 3, trait: 2 }, hard: { sameMajor: false, fixPair: false, splitPair: false, evenTransfer: false } },
-  { id: "ps3", name: "일정 우선", desc: "모일 시간을 맞추기 어려운 야간·대형 수업", own: false, size: 5, rest: "extra", weights: { major: 2, role: 3, time: 5, trait: 2 }, hard: { sameMajor: false, fixPair: false, splitPair: false, evenTransfer: false } },
-  { id: "ps4", name: "성향 중심", desc: "한 학기 내내 함께 가는 장기 프로젝트", own: false, size: 4, rest: "extra", weights: { major: 2, role: 3, time: 3, trait: 5 }, hard: { sameMajor: true, fixPair: false, splitPair: false, evenTransfer: false } }
-];
 const blankStudent = ({ name, email, major, studentId }) => ({
   role: "student", name, email, major, studentId, year: "", bio: "", roles: [], skills: [],
   traits: { pace: 3, prep: 3, lead: 3, comm: 3 }, traitsSet: false, schedule: {}, joined: [], ready: {}, readyAt: {}, projects: []
@@ -117,7 +110,7 @@ function buildSeed() {
       rowsFrom(mocks.slice(2, 42), c3due, Array.from({ length: 28 }, (_, i) => i + 12)), "")
   ];
   accounts["doyoon@hanyang.ac.kr"].readyAt = {};
-  return { v: DB_VERSION, accounts, classes, presets: PRESETS.map(p => ({ ...p, weights: { ...p.weights }, hard: { ...p.hard } })), seq: 100 };
+  return { v: DB_VERSION, accounts, classes, seq: 100 };
 }
 
 /* ---------- 셀렉터 ---------- */
@@ -170,6 +163,33 @@ const requiredMissing = a => profileTodos(a).filter(t => t.req && !t.ok);
 
 const taClasses = email => db.classes.filter(c => c.tas.some(t => t.email === email));
 
+/* ---------- 편성 설정 보관함 (교수 계정에 귀속) ----------
+   교수가 만든 편성 설정을 이름 붙여 저장해 두고, 다른 수업의 편성 설정/수업 개설 화면에서 불러온다.
+   · 저장 위치: accounts[email].savedSetups = [{ id, name, savedAt, from, snap }]  (snap 내용은 TM.snapshotSetup 참고)
+   · 계정별로 분리 — 다른 교수의 보관함은 보이지 않는다. 탈퇴 시 계정과 함께 삭제된다.
+   · 서버가 생기면: GET/POST/DELETE /me/setup-presets 로 교체 (snap 형식이 계약) */
+const MAX_SAVED_SETUPS = 20, SAVED_SETUP_NAME_MAX = 30;
+function savedSetups(a = me()) {
+  if (!a || a.role !== "professor") return [];
+  if (!Array.isArray(a.savedSetups)) a.savedSetups = [];
+  return a.savedSetups;
+}
+/** 같은 이름(공백·대소문자 무시)이 이미 있으면 그 항목 */
+const findSavedSetup = (name, a = me()) => savedSetups(a).find(x => x.name.trim().toLowerCase() === String(name).trim().toLowerCase());
+/** 저장(같은 이름이면 덮어쓰기). 반환: { ok, entry, replaced } | { ok:false, error } */
+function saveSetupToLibrary(name, cls, a = me()) {
+  const nm = String(name || "").trim().replace(/\s+/g, " ");
+  if (!nm) return { ok: false, error: "저장할 이름을 입력하세요." };
+  if (nm.length > SAVED_SETUP_NAME_MAX) return { ok: false, error: `이름은 ${SAVED_SETUP_NAME_MAX}자 이내로 입력하세요.` };
+  const list = savedSetups(a), old = findSavedSetup(nm, a);
+  if (!old && list.length >= MAX_SAVED_SETUPS) return { ok: false, error: `최대 ${MAX_SAVED_SETUPS}개까지 저장할 수 있습니다. 쓰지 않는 설정을 삭제해 주세요.` };
+  const entry = { id: old ? old.id : nextId("ss"), name: nm, savedAt: new Date().toISOString(), from: cls.name, snap: TM.snapshotSetup(cls.setup) };
+  if (old) list[list.indexOf(old)] = entry; else list.unshift(entry);
+  return { ok: true, entry, replaced: !!old };
+}
+function deleteSavedSetup(id, a = me()) { const l = savedSetups(a), i = l.findIndex(x => x.id === id); if (i >= 0) l.splice(i, 1); return i >= 0; }
+const getSavedSetup = (id, a = me()) => savedSetups(a).find(x => x.id === id) || null;
+
 /* ---------- 확정 → 학생 프로젝트 생성/회수 ---------- */
 function memberSnapshot(m) { return { id: m.id, sid: m.sid, n: m.n, m: m.m, y: m.y, yearLabel: m.yearLabel, roles: m.roles, skills: m.skills, traits: m.traits, sched: m.sched, transfer: !!m.transfer, email: m.email || null, submitted: m.submitted }; }
 function publishProjects(cls) {
@@ -203,7 +223,12 @@ function purgeAccount(email) {
 function initStore() {
   let d = null;
   try { const raw = localStorage.getItem(DB_KEY); if (raw) d = JSON.parse(raw); } catch (e) { d = null; }
-  if (validDb(d)) { db = d; }
+  if (validDb(d)) {
+    db = d;
+    // 가중치는 제작팀 고정값(TM.DEFAULT_WEIGHTS)만 쓴다 → 이전 버전이 저장해 둔 수업별 가중치·프리셋은 정리한다
+    db.classes.forEach(c => { c.setup.weights = { ...TM.DEFAULT_WEIGHTS }; delete c.setup.presetId; });
+    delete db.presets; save();
+  }
   else {
     db = buildSeed();
     // 데이터마이닝(c2)은 이미 편성이 확정된 수업으로 시작 → 학생의 기존 프로젝트가 실제 결과에서 만들어진다.
