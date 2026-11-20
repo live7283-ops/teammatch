@@ -74,3 +74,14 @@ def test_solve_validation():
     assert client.post("/api/engine/solve", json={**base, "candidates": bad}).status_code == 422
     too_many = _cands(301)
     assert client.post("/api/engine/solve", json={**base, "candidates": too_many}).status_code == 422
+
+def test_solve_passes_priority_and_min_common_hours():
+    # 우선순위와 공통 시간 최소 조건이 엔진까지 전달되어야 한다 (#10 에서 추가된 조건)
+    r = client.post("/api/engine/solve", json={
+        "team_size": 4, "candidates": _cands(12), "seed": 3,      # weights 생략 가능
+        "hard": {"min_common_hours": 2, "priority": ["min_common_hours"]}})
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["hard_used"]["min_common_hours"] == 2 and d["hard_used"]["priority"] == ["min_common_hours"]
+    ids = [c["rule_id"] for c in d["result"]["conditions"]]
+    assert "min_common_hours" in ids

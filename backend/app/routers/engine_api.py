@@ -54,7 +54,7 @@ class EngineCandidateIn(BaseModel):
 
 class EngineSolveRequest(BaseModel):
     team_size: int = Field(ge=2, le=8)
-    weights: Weights
+    weights: Weights = Field(default_factory=lambda: Weights(major=4, role=5, time=3, trait=3))  # 생략 시 엔진 기본값
     hard: HardRulesIn = HardRulesIn()
     note: str | None = Field(default=None, max_length=2000)
     starts: int = Field(default=3, ge=1, le=5)
@@ -86,6 +86,8 @@ def _merge_hard(body: EngineSolveRequest, note_hard: HardRules | None) -> HardRu
         fixed_pairs=[tuple(p) for p in body.hard.fixed_pairs],
         spread_tags=list(body.hard.spread_tags),
         role_minimums=dict(body.hard.role_minimums),
+        min_common_hours=body.hard.min_common_hours,
+        priority=list(body.hard.priority),
     )
     if note_hard:
         for tag, need in note_hard.role_minimums.items():
@@ -103,6 +105,8 @@ def _hard_dict(h: HardRules) -> dict:
         "fixed_pairs": [list(p) for p in h.fixed_pairs],
         "spread_tags": list(h.spread_tags),
         "role_minimums": dict(h.role_minimums),
+        "min_common_hours": h.min_common_hours,
+        "priority": list(h.priority),
     }
 
 
