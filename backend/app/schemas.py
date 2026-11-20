@@ -236,11 +236,20 @@ class HardRulesIn(BaseModel):
     fixed_pairs: list[tuple[str, str]] = []
     spread_tags: list[str] = []
     role_minimums: dict[str, int] = {}
+    min_common_hours: int | None = Field(default=None, ge=1, le=84)   # 팀 공통 가능 시간 주 N시간 이상
+    # 조건 우선순위: rule_id 목록(앞이 1순위) — 예: ["role_min:개발", "same_major_max", "min_common_hours"]
+    # 모두 지킬 수 없을 때 뒤에 있는 조건부터 양보한다. 비우면 모든 조건이 같은 무게.
+    priority: list[str] = []
+
+
+def _default_weights() -> Weights:
+    """가중치를 보내지 않으면 쓰는 엔진 기본값 (engine.constraints.SoftWeights 와 같은 값)."""
+    return Weights(major=4, role=5, time=3, trait=3)
 
 
 class MatchV2Request(BaseModel):
     team_size: int = Field(ge=2, le=8)
-    weights: Weights
+    weights: Weights = Field(default_factory=_default_weights)   # 생략 가능 — 화면에서 가중치를 없앨 때
     hard: HardRulesIn = HardRulesIn()
     note: str | None = None          # 주관식 요구사항 (언어모델이 해석)
     starts: int = Field(default=3, ge=1, le=5)   # best-of-N
@@ -253,6 +262,8 @@ class CheckItemOut(BaseModel):
     ok: bool
     detail: str
     suggestion: str | None = None
+    rule_id: str | None = None       # 어느 조건 줄의 점검인지 (조건과 무관한 항목은 null)
+    fix: dict | None = None          # 버튼으로 바로 적용할 수정안 {op: set|remove, path, value}
 
 
 class PrecheckOut(BaseModel):
@@ -301,6 +312,8 @@ class MatchV2Result(BaseModel):
     teams: list[V2TeamOut]
     trace: TraceOut                  # 조화도 추이(그래프용)
     parsed_rules: list[ParsedRuleOut]  # 주관식 해석 결과
+    # 조건별 결과 [{rule_id, kind, label, satisfied, violations, team_indexes, priority}] — 우선순위가 있으면 그 순서
+    conditions: list[dict] = []
 
 
 # ================================================================

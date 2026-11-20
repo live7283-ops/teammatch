@@ -1,6 +1,7 @@
 """TeamFit 엔진 v1.1 — 팀 편성 최적화.
 
 목적함수 J = 평균 적합도 + λ·최저 팀 적합도 − 1000·하드 위반 (λ = 1)
+HardRules.priority 가 있으면 위반마다 순위 배수(한 단계 = 10배)를 곱한다 → 다 지킬 수 없을 때 아래 순위부터 양보.
 순서: 희소 태그 우선 초기 배치 → 2-교환 국소 탐색 → 담금질(SA) → 마무리 국소 탐색, starts번 반복.
 교환 한 번에 바뀐 두 팀만 다시 채점하고(Evaluator 캐시), 최저 점수는 하위 3개를 유지해 O(1)로 갱신한다.
 공개 이름(Trace, Solution, optimize)과 인자는 라우터와의 계약이므로 바꾸지 않는다.
@@ -61,7 +62,7 @@ class _State:
                 self.where[i] = ti
         self.sc, self.hd = [], []
         for t in self.teams:
-            f, h = ev.team(t)
+            f, h = ev.scored(t)
             self.sc.append(f)
             self.hd.append(h)
         self.sum_s, self.sum_h = sum(self.sc), sum(self.hd)
@@ -82,8 +83,8 @@ class _State:
 
     def try_pair(self, a, ta, b, tb):
         """팀 a, b를 ta, tb로 바꿨을 때의 (J, 점수 a, 위반 a, 점수 b, 위반 b)."""
-        fa, ha = self.ev.team(ta)
-        fb, hb = self.ev.team(tb)
+        fa, ha = self.ev.scored(ta)
+        fb, hb = self.ev.scored(tb)
         k = len(self.sc)
         s = self.sum_s - self.sc[a] - self.sc[b] + fa + fb
         h = self.sum_h - self.hd[a] - self.hd[b] + ha + hb
@@ -143,8 +144,8 @@ def greedy_init(ev: Evaluator, sizes, rng: random.Random):
         for ti in range(k):
             if len(teams[ti]) + len(u) > sizes[ti]:
                 continue
-            f0, h0 = ev.team(teams[ti]) if teams[ti] else (0.0, 0.0)
-            f1, h1 = ev.team(teams[ti] + u)
+            f0, h0 = ev.scored(teams[ti]) if teams[ti] else (0.0, 0.0)
+            f1, h1 = ev.scored(teams[ti] + u)
             gain = (f1 - f0) - HARD_PENALTY * (h1 - h0) - 0.01 * len(teams[ti]) + rng.random() * 1e-6
             if gain > best_gain:
                 best, best_gain = ti, gain
@@ -254,9 +255,10 @@ def _to_solution(ev: Evaluator, st: _State, swaps: int, trace: Trace) -> Solutio
     order = sorted(range(len(st.teams)), key=lambda t: sorted(st.teams[t]))   # 학생 순서 기준으로 팀 번호 고정
     teams = [[ev.cands[i] for i in sorted(st.teams[t], key=lambda i: ev.cands[i].name)] for t in order]
     scores = [st.sc[t] for t in order]
-    viol = int(round(st.sum_h))
+    viol = int(round(sum(ev.team(t)[1] for t in st.teams)))          # 보고용: 위반 건수
+    cost = round(st.sum_h, 6) if ev.weighted else viol               # 목적함수용: 우선순위 배수를 곱한 벌점
     avg, low = sum(scores) / len(scores), min(scores)
-    obj = Objective(avg + MAXIMIN_LAMBDA * low - HARD_PENALTY * viol, avg, low, viol, scores)
+    obj = Objective(avg + MAXIMIN_LAMBDA * low - HARD_PENALTY * cost, avg, low, viol, scores)
     return Solution(teams, obj, swaps, trace)
 
 

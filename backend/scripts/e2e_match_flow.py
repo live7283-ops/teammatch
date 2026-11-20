@@ -178,6 +178,38 @@ def main():
     common = set.intersection(*[set(next(c for c in cands if c.student_id == m["student_id"]).free_slots)
                                 for m in team["members"]])
     check(len(det["common_slots"]) == len(common), f"팀 상세 공통 시간 {len(det['common_slots'])}칸 = 엔진 계산 {len(common)}칸")
+
+    # 9) 조건 카탈로그: 이 수업에서 고를 수 있는 조건 목록
+    s, cat = call(base, "GET", f"/api/classes/{class_id}/conditions?team_size=4", prof)
+    kinds = [c["kind"] for c in cat["conditions"]] if s == 200 else []
+    check(s == 200 and "min_common_hours" in kinds and "role_min" in kinds, f"조건 카탈로그 ({s}, {len(kinds)}종)")
+    if s == 200:
+        dev = next(o for c in cat["conditions"] if c["kind"] == "role_min"
+                   for o in c["params"][0]["options"] if o["value"] == "개발")
+        check(dev["holders"] == sum(1 for c in cands if any(r in ("프론트엔드", "백엔드", "데이터") for r in c.roles)),
+              f"카탈로그 '개발' 보유 {dev['holders']}명 = 설문 집계")
+
+    # 10) 우선순위 + 공통 시간 조건으로 다시 편성 (가중치는 보내지 않음 → 엔진 기본값)
+    order = ["role_min:개발", "same_major_max", "min_common_hours"]
+    body2 = {"team_size": 4, "hard": {"same_major_max": 2, "role_minimums": {"개발": 1}, "min_common_hours": 2,
+                                      "priority": order}, "starts": 3, "seed": 0}
+    s, pre2 = call(base, "POST", f"/api/classes/{class_id}/precheck", prof, body2)
+    ids = [it.get("rule_id") for it in pre2["items"]] if s == 200 else []
+    check(s == 200 and pre2["feasible"] and set(order) <= set(ids), f"사전 점검 항목에 rule_id ({s})")
+    s, res2 = call(base, "POST", f"/api/classes/{class_id}/match-v2", prof, body2)
+    if not check(s == 200, f"우선순위 조건으로 match-v2 ({s})"):
+        print("     응답:", res2)
+        return finish()
+    conds = res2["conditions"]
+    check([c["rule_id"] for c in conds] == order and [c["priority"] for c in conds] == [1, 2, 3],
+          "conditions가 우선순위 순서로 옴")
+    check(all(c["satisfied"] for c in conds) and res2["hard_violations"] == 0, "세 조건 모두 충족")
+    s, cur2 = call(base, "GET", f"/api/classes/{class_id}/result", prof)
+    hard2 = HardRules(same_major_max=2, role_minimums={"개발": 1}, min_common_hours=2, priority=order)
+    exp2 = evaluate(cands, [[m["student_id"] for m in t["members"]] for t in cur2["teams"]], SoftWeights(), hard2, 4)
+    check(min(t["common_hours"] for t in exp2["teams"]) >= 2,
+          f"모든 팀 공통 시간 2시간 이상 (최소 {min(t['common_hours'] for t in exp2['teams'])}h)")
+    check(abs(cur2["avg_score"] - exp2["avg_fit"]) < 0.06, f"가중치 생략 시 엔진 기본값으로 채점 ({cur2['avg_score']:.2f})")
     return finish()
 
 
