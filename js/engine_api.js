@@ -10,7 +10,8 @@
     const q = new URLSearchParams(location.search).get("engine");
     const m = (q === "local" || q === "server") ? q : (window.TM_CONFIG.ENGINE || "auto");
     if (m === "local") return "local";
-    if (m === "auto" && !/^https?:$/.test(location.protocol)) return "local"; // file:// 은 CORS 로 어차피 막힌다
+    // auto: 내 컴퓨터(localhost)에서 열었을 때만 서버 엔진을 쓴다. file:// 은 CORS 로 막히고, 공개 주소(GitHub Pages 등)에는 서버가 없다.
+    if (m === "auto" && !(/^https?:$/.test(location.protocol) && /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname))) return "local";
     return "server";
   }
 
