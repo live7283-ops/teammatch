@@ -8,7 +8,7 @@
 ================================================================= */
 const { DAYS, BLOCKS, ROLES, DEV_ROLES, ALL_SLOTS, slotKey, mulberry32 } = TM;
 
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const DB_KEY = "teammatch-demo-v2";
 const SESSION_KEY = "teammatch-session-v2";
 const DAY_MS = 864e5;
@@ -95,7 +95,7 @@ function buildSeed() {
       traits: { pace: 3, prep: 2, lead: 4, comm: 3 }, traitsSet: true, schedule: schedMap, joined: ["c1", "c2"], ready: { c1: false } },
     "sumin.lee@hanyang.ac.kr": { ...blankStudent({ name: "이수민", email: "sumin.lee@hanyang.ac.kr", major: "데이터사이언스학과", studentId: "2025123456" }),
       year: "대학원", roles: ["데이터"], skills: [{ n: "Python", l: 4 }, { n: "SQL", l: 3 }, { n: "Pandas", l: 3 }], traitsSet: true },
-    "jiwon.han@hanyang.ac.kr": { role: "professor", name: "한지원", email: "jiwon.han@hanyang.ac.kr", dept: "데이터사이언스학과", school: "한양대학교 ERICA" }
+    "gildonghong@hanyang.ac.kr": { role: "professor", name: "홍길동", email: "gildonghong@hanyang.ac.kr", dept: "데이터사이언스학과", school: "한양대학교 ERICA" }
   };
   const c1due = dl(4), c2due = dl(-14), c3due = dl(10);
   const mk = (id, name, code, cap, join, due, kind, roster, note, tas) => ({ id, name, code, term: "2026학년도 2학기", cap, join, deadline: due, kind, createdAt: new Date(now - 30 * DAY_MS).toISOString(),

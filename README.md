@@ -6,7 +6,7 @@
 `index.html`을 브라우저로 열면 됩니다. (빌드 도구 불필요 · Google Fonts만 외부 요청, 막혀 있어도 기본 글꼴로 동작)
 
 로그인은 **이메일 형식만 맞으면 어떤 주소로든** 입장합니다. 처음 쓰는 주소는 데모 계정이 자동 생성되고, 비밀번호는 검증하지 않습니다. (인증·중복·도메인 확인은 백엔드의 몫)
-샘플 데이터가 들어 있는 데모 계정: 학생 `doyoon@hanyang.ac.kr` · 조교 `sumin.lee@hanyang.ac.kr` · 교수 `jiwon.han@hanyang.ac.kr`
+샘플 데이터가 들어 있는 데모 계정: 학생 `doyoon@hanyang.ac.kr` · 조교 `sumin.lee@hanyang.ac.kr` · 교수 `gildonghong@hanyang.ac.kr`
 
 ## 테스트
 ```bash
