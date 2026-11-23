@@ -9,7 +9,7 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const DEMO_ACCOUNTS = [
   { email: "doyoon@hanyang.ac.kr", role: "student", label: "학생 · 김도윤" },
   { email: "sumin.lee@hanyang.ac.kr", role: "student", label: "조교 · 이수민 (학생 탭)" },
-  { email: "jiwon.han@hanyang.ac.kr", role: "professor", label: "교수 · 한지원" }
+  { email: "gildonghong@hanyang.ac.kr", role: "professor", label: "교수 · 홍길동" }
 ];
 
 function setRole(r) {
@@ -19,9 +19,9 @@ function setRole(r) {
   $("#suTitle").textContent = prof ? "교수 회원가입" : "학생 회원가입";
   $("#liSub").textContent = prof ? "학교 이메일로 로그인하면 수업을 개설하고 팀을 편성할 수 있습니다." : "학교 이메일로 로그인하면 프로필과 설문을 채우고 팀 매칭을 준비할 수 있습니다.";
   $("#suSub").textContent = prof ? "가입 후 수업을 개설하고 참여 코드를 학생에게 전달하세요." : "가입 후 프로필을 채우고 수업 참여 코드를 입력하면 팀 매칭 준비가 시작됩니다.";
-  $("#liEmail").placeholder = prof ? "jiwon.han@hanyang.ac.kr" : "doyoon@hanyang.ac.kr";
-  $("#suName").placeholder = prof ? "한지원" : "김도윤";
-  $("#suEmail").placeholder = prof ? "jiwon.han@hanyang.ac.kr" : "doyoon@hanyang.ac.kr";
+  $("#liEmail").placeholder = prof ? "gildonghong@hanyang.ac.kr" : "doyoon@hanyang.ac.kr";
+  $("#suName").placeholder = prof ? "홍길동" : "김도윤";
+  $("#suEmail").placeholder = prof ? "gildonghong@hanyang.ac.kr" : "doyoon@hanyang.ac.kr";
   $("#suMajorLabel").textContent = prof ? "소속 학과" : "전공";
   $("#suStudentIdField").classList.toggle("hidden", prof);
   $("#suCodeField").classList.toggle("hidden", prof);
